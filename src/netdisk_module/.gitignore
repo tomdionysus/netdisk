@@ -1,0 +1,8 @@
+*.ko
+*.o
+*.test_*
+.*.cmd
+*.mod*
+.ramdisk*
+Module.symvers
+modules.order
