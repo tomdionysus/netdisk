@@ -72,13 +72,14 @@ typedef struct packet_handshake {
   uint64_t node_id;
 } packet_handshake_t;
 
-// Should be exactly 16 bytes long.
+// Should be exactly 32 bytes long.
 typedef struct packet_header {
   uint16_t type;
   uint16_t flags;
   uint32_t length;
-  uint32_t block_id;
-  uint32_t transaction_id;
+  uint64_t block_id;
+  uint64_t transaction_id;
+  uint64_t user_data;
 } packet_header_t;
 
 #pragma pack(pop)

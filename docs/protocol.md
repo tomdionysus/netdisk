@@ -20,12 +20,12 @@ The netdisk protocol is a binary protocol that works over TCP. A client connects
 * Each side should wait to receive the other's 32 byte IV
 * When received, that establishes the other side's AES context.
 * All traffic past this point is encrypted with AES CBC using that context.
-* Each node then constructs, encrypts and sends a handshake packet
+* Each node then constructs, encrypts and sends a handshake packet.
 * Each side then sets state to NETDISK_SESSION_STATE_HANDSHAKE.
 
 ## NETDISK_SESSION_STATE_HANDSHAKE
 
-* Each side should wait to recieve the other's handshake.
+* Each side should wait to receive the other's handshake.
 * The handshake is decrypted and checked for a magic number and the version.
 * If either are incorrect or incompatible, the connection is closed.
 * If correct, each side stores the other's node ID, a unique 64 bit identifier.
@@ -33,21 +33,23 @@ The netdisk protocol is a binary protocol that works over TCP. A client connects
 
 ## NETDISK_SESSION_STATE_READY
 
+* The session is established at the point.
 * Each side enters a loop of receiving and decrypting a header packet, and if indicated a data block.
 * Operations are processed given the header and data.
 * Each side may send to the other more encrypted header packets, and if indicated data blocks.
 
 # Normal Operation
 
-In Normal operation each side waits for and decrypts a 16 byte header packet:
+In normal operation each side waits for and decrypts a 32 byte header packet:
 
 ```c
 struct packet_header {
-  uint16_t type;
-  uint16_t flags;
-  uint32_t length;
-  uint32_t block_id;
-  uint32_t transaction_id;
+  uint16_t type;              // The type of the packet (commands, replies, etc)
+  uint16_t flags;             // (Unused, Reserved) Flags for the packet
+  uint32_t length;            // The length of the data following this packet
+  uint64_t block_id;          // The block_id (or block offset) to be read or written
+  uint64_t transaction_id;    // (Unused) The transaction ID for this read or write 
+  uint64_t user_data;         // (Unused) Any user data to be included in the reply.
 }
 ```
 
@@ -67,6 +69,8 @@ The operation is then processed depending on this header and data - the `type` f
 | NETDISK_REPLY_OUT_OF_RANGE       | A write was requested to an out of range block, the `block_id` and `transaction_id` describe the write.                                    |
 | NETDISK_REPLY_ERROR              | An unknown error has occured                                                                                                               |
 
+A node MUST always copy the values received in `block_id`,`transaction_id` and`user_data` to the reply packet. A node MUST never set the `length` field unless it will immediately send that exact number of bytes after the packet - a `length` of zero is valid and means no data is to be transferred.
+
 ## NETDISK_COMMAND_READ
 
 **Client:** The client should set up the `block_id` and `transaction_id` fields to describe the data to be read. `length` should be set to zero.
@@ -79,5 +83,7 @@ The operation is then processed depending on this header and data - the `type` f
 
 **Server:** The server should reply with NETDISK_REPLY_WRITE_OK and if the write was successful, with `length` set to zero and the the appropriate `block_id` and `transaction_id` values. On an error, a packet of type NETDISK_REPLY_READ_ONLY, NETDISK_REPLY_OUT_OF_RANGE or NETDISK_REPLY_ERROR should be sent with the appropriate `block_id` and `transaction_id` values.
 
-## NETDISK_REPLY_ERROR
+# Shutdown
+
+The session is ended by simply closing the TCP connection. This can be performed at any time, and nodes MUST handle disconnection at any point in time gracefully.
 
