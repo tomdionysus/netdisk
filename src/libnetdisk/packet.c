@@ -36,28 +36,24 @@ int packet_destroy_socket(int socket_fd) {
   return NETDISK_PACKET_SOCKET_OK;
 }
 
-// void packet_init(packet_t *packet) {
-//   // Set all to zero
-//   memset(packet, 0, sizeof(packet_t));
+void packet_handshake_init(packet_handshake_t *packet) {
+  memset(packet, 0, sizeof(packet_handshake_t));
 
-//   // Initialize magic array
-//   memcpy(packet->fields.magic, NETDISK_MAGIC_NUMBER, sizeof(NETDISK_MAGIC_NUMBER));
+  // Initialize magic array
+  memcpy(packet->magic, NETDISK_MAGIC_NUMBER, sizeof(NETDISK_MAGIC_NUMBER));
 
-//   // Initialize version
-//   packet->fields.version.major = NETDISK_VERSION_MAJOR;
-//   packet->fields.version.minor = NETDISK_VERSION_MINOR;
-//   packet->fields.version.patch = NETDISK_VERSION_PATCH;
+  // Initialize version
+  packet->version.major = NETDISK_VERSION_MAJOR;
+  packet->version.minor = NETDISK_VERSION_MINOR;
+  packet->version.patch = NETDISK_VERSION_PATCH;
+}
 
-//   // Timestamp
-//   packet->fields.timestamp = time(NULL);
-// }
+bool packet_magic_check(packet_handshake_t *packet) { return memcmp(packet->magic, NETDISK_MAGIC_NUMBER, sizeof(NETDISK_MAGIC_NUMBER)) == 0; }
 
-// bool packet_magic_check(packet_t *packet) { return memcmp(packet->fields.magic, NETDISK_MAGIC_NUMBER, sizeof(NETDISK_MAGIC_NUMBER)) == 0; }
-
-// bool packet_version_check(packet_t *packet, bool strict) {
-//   return packet->fields.version.major == NETDISK_VERSION_MAJOR && packet->fields.version.minor == NETDISK_VERSION_MINOR &&
-//          (!strict || packet->fields.version.patch == NETDISK_VERSION_PATCH);
-// }
+bool packet_version_check(packet_handshake_t *packet, bool strict) {
+  return packet->version.major == NETDISK_VERSION_MAJOR && packet->version.minor == NETDISK_VERSION_MINOR &&
+         (!strict || packet->version.patch == NETDISK_VERSION_PATCH);
+}
 
 // int packet_send(int socket_fd, packet_t *packet, uint8_t *key, struct sockaddr_in *addr) {
 //   // Initialise IV

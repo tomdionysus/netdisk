@@ -12,7 +12,7 @@
 #define NETDISK_BLOCK_SIZE 512
 #define NETDISK_BLOCK_SHIFT 9
 #define NETDISK_HEADER_SIZE 64
-#define NETDISK_MAX_PACKET_SIZE (NETDISK_BLOCK_SIZE + NETDISK_HEADER_SIZE)
+#define NETDISK_MAX_PACKET_SIZE 1024 * 1024
 #define NETDISK_KEY_SIZE 32
 
 #define NETDISK_VERSION_MAJOR 0x00
@@ -46,11 +46,6 @@
 #define NETDISK_PACKET_SOCKET_BIND_FAILED 2
 #define NETDISK_PACKET_SOCKET_LISTEN_FAILED 3
 
-#define NETDISK_SESSION_STATE_INITIAL 0
-#define NETDISK_SESSION_STATE_IV 1
-#define NETDISK_SESSION_STATE_HANDSHAKE 2
-#define NETDISK_SESSION_STATE_READY 3
-
 #include <arpa/inet.h>
 #include <errno.h>
 #include <memory.h>
@@ -64,12 +59,6 @@
 
 extern const uint8_t NETDISK_MAGIC_NUMBER[];
 
-typedef struct session {
-  int socket_fd;
-  struct sockaddr_in addr;
-  uint8_t state;
-} session_t;
-
 #pragma pack(push, 1)
 
 // Should be exactly 16 bytes long.
@@ -81,7 +70,7 @@ typedef struct packet_handshake {
     uint8_t patch;
     uint8_t _reserved;
   } version;
-  uint8_t _reserved[8];
+  uint64_t node_id;
 } packet_handshake_t;
 
 // Should be exactly 16 bytes long.
@@ -96,5 +85,9 @@ typedef struct packet_header {
 
 int packet_create_socket(int* socket_fd, struct sockaddr_in* addr);
 int packet_destroy_socket(int socket_id);
+
+void packet_handshake_init(packet_handshake_t* packet);
+bool packet_magic_check(packet_handshake_t *packet);
+bool packet_version_check(packet_handshake_t *packet, bool strict);
 
 #endif

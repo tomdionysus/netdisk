@@ -16,6 +16,7 @@ file(GLOB netdiskd_SOURCES ${CMAKE_SOURCE_DIR}/src/netdiskd/*.c)
 file(GLOB netdisk_testclient_SOURCES ${CMAKE_SOURCE_DIR}/src/netdisk_testclient/*.c)
 
 # Dependencies
+find_package(Threads REQUIRED)
 include(${CMAKE_SOURCE_DIR}/deps/tiny-AES-c/CMakeLists.txt)
 include(${CMAKE_SOURCE_DIR}/deps/red-black-tree/CMakeLists.txt)
 
@@ -39,6 +40,7 @@ add_executable(
 target_link_libraries(
 	netdiskd 
 	netdisk
+	Threads::Threads
 )
 
 # Linux Module
