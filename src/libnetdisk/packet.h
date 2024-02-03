@@ -87,7 +87,7 @@ int packet_create_socket(int* socket_fd, struct sockaddr_in* addr);
 int packet_destroy_socket(int socket_id);
 
 void packet_handshake_init(packet_handshake_t* packet);
-bool packet_magic_check(packet_handshake_t *packet);
-bool packet_version_check(packet_handshake_t *packet, bool strict);
+bool packet_magic_check(packet_handshake_t* packet);
+bool packet_version_check(packet_handshake_t* packet, bool strict);
 
 #endif

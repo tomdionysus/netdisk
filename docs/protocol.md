@@ -69,19 +69,15 @@ The operation is then processed depending on this header and data - the `type` f
 
 ## NETDISK_COMMAND_READ
 
-**Client**
-The client should set up the `block_id` and `transaction_id` fields to describe the data to be read. `length` should be set to zero.
+**Client:** The client should set up the `block_id` and `transaction_id` fields to describe the data to be read. `length` should be set to zero.
 
-**Server**
-The server should reply with NETDISK_REPLY_READ_OK if the read was successful, and immediately send the data of `length` bytes. On an error, the `length` should be set to zero, and a packet of type NETDISK_REPLY_OUT_OF_RANGE or NETDISK_REPLY_ERROR should be sent with the appropriate `block_id` and `transaction_id` values.
+**Server:** The server should reply with NETDISK_REPLY_READ_OK if the read was successful, and immediately send the data of `length` bytes. On an error, the `length` should be set to zero, and a packet of type NETDISK_REPLY_OUT_OF_RANGE or NETDISK_REPLY_ERROR should be sent with the appropriate `block_id` and `transaction_id` values.
 
 ## NETDISK_COMMAND_WRITE
 
-**Client**
-The client should set up the `length`, `block_id` and `transaction_id` fields to describe the data to be written, and immediately send the data of `length` bytes.
+**Client:** The client should set up the `length`, `block_id` and `transaction_id` fields to describe the data to be written, and immediately send the data of `length` bytes.
 
-**Server**
-The server should reply with NETDISK_REPLY_WRITE_OK and if the write was successful, with `length` set to zero and the the appropriate `block_id` and `transaction_id` values. On an error, a packet of type NETDISK_REPLY_READ_ONLY, NETDISK_REPLY_OUT_OF_RANGE or NETDISK_REPLY_ERROR should be sent with the appropriate `block_id` and `transaction_id` values.
+**Server:** The server should reply with NETDISK_REPLY_WRITE_OK and if the write was successful, with `length` set to zero and the the appropriate `block_id` and `transaction_id` values. On an error, a packet of type NETDISK_REPLY_READ_ONLY, NETDISK_REPLY_OUT_OF_RANGE or NETDISK_REPLY_ERROR should be sent with the appropriate `block_id` and `transaction_id` values.
 
 ## NETDISK_REPLY_ERROR
 

@@ -198,13 +198,13 @@ void* handle_connection(void* arg) {
           AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, recvlen);
           packet = (packet_handshake_t*)session->buffer;
           // Check Magic number
-          if(!packet_magic_check(packet)) {
+          if (!packet_magic_check(packet)) {
             log_warn("Bad magic number from %s:%d, disconnecting", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
             running = false;
             break;
           }
-          // Check Version 
-          if(!packet_version_check(packet, config.strict_version)) {
+          // Check Version
+          if (!packet_version_check(packet, config.strict_version)) {
             log_warn("Incompatible version from %s:%d, disconnecting", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
             running = false;
             break;
@@ -229,23 +229,23 @@ void* handle_connection(void* arg) {
           AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, recvlen);
           header = (packet_header_t*)session->buffer;
           // Check we have enough buffer
-          if(header->length > NETDISK_MAX_PACKET_SIZE) {
+          if (header->length > NETDISK_MAX_PACKET_SIZE) {
             log_warn("Packet too large (%d bytes, limit %d)", header->length, NETDISK_MAX_PACKET_SIZE);
             running = false;
-              break;
+            break;
           }
           // If there's more data, receive it
-          if(header->length>0) {
-            if(recv_exact_with_timeout(session->socket_fd, session->buffer+sizeof(packet_header_t), sizeof(packet_header_t), 10000) != header->length) {
+          if (header->length > 0) {
+            if (recv_exact_with_timeout(session->socket_fd, session->buffer + sizeof(packet_header_t), sizeof(packet_header_t), 10000) != header->length) {
               log_warn("Tiemout receiving Packet data (%d bytes)", header->length);
               running = false;
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->aes_context, session->buffer+sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(&session->aes_context, session->buffer + sizeof(packet_header_t), header->length);
           }
           // Process the packet, stop if return true
-          if(process_packet(session, header, session->buffer+sizeof(packet_header_t))) {
+          if (process_packet(session, header, session->buffer + sizeof(packet_header_t))) {
             running = false;
             break;
           }
@@ -271,9 +271,7 @@ void* handle_connection(void* arg) {
   return NULL;
 }
 
-bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) {
-  return false;
-}
+bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) { return false; }
 
 ssize_t recv_exact_with_timeout(int socket_fd, uint8_t* buffer, size_t size, int timeout_ms) {
   ssize_t total_received = 0;
