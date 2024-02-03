@@ -21,9 +21,8 @@ netdisk supports several features:
 ## Encrption
 
 * AES256 is used with a pre-shared key (netdisk performs no key exchange).
-* Blocks are encrypted in CBC mode, with a cryptographic random IV for each connection.
-* netdiskd will not allow a client without the correct key to establish a session.
-* A combination of sequence numbers and timestamps are used to mitigate replay attacks.
+* All traffic are encrypted in CBC mode, with a random IV for each side of each session.
+* netdiskd will not allow a client without the correct key, or an incompatible version, to establish a session.
 
 ## Status
 

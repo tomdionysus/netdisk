@@ -55,7 +55,6 @@
 #include <time.h>
 
 #include "random.h"
-#include "tiny-AES-c/aes.h"
 
 extern const uint8_t NETDISK_MAGIC_NUMBER[];
 
@@ -78,7 +77,8 @@ typedef struct packet_header {
   uint16_t type;
   uint16_t flags;
   uint32_t length;
-  uint64_t args;
+  uint32_t block_id;
+  uint32_t transaction_id;
 } packet_header_t;
 
 #pragma pack(pop)

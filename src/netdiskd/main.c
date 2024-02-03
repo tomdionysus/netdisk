@@ -241,7 +241,7 @@ void* handle_connection(void* arg) {
               running = false;
               break;
             }
-            // Decrypt it
+            // And Decrypt it
             AES_CBC_decrypt_buffer(&session->aes_context, session->buffer+sizeof(packet_header_t), header->length);
           }
           // Process the packet, stop if return true
