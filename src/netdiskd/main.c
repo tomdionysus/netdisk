@@ -293,8 +293,10 @@ void* handle_connection(void* arg) {
 }
 
 bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, char* address_port) {
+  // Alloc Buffer
   packet_header_t* reply = malloc(NETDISK_MAX_PACKET_SIZE);
 
+  // Copy user info
   reply->block_id = header->block_id;
   reply->transaction_id = header->transaction_id;
   reply->user_data = header->user_data;
@@ -302,15 +304,22 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
 
   switch(header->operation) {
   case NETDISK_COMMAND_INFO:
+    log_debug("(%s) NETDISK_COMMAND_INFO", address_port);
     reply->operation = NETDISK_REPLY_INFO;
   break;
   case NETDISK_COMMAND_READ:
-    if(fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET)!=0) {
+    if (config.max_blocks != 0 && header->block_id>config.max_blocks) {
+      log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
+      reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
+    } else if(fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET)!=0) {
+      log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
       reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
     } else if(fread(reply+sizeof(packet_header_t), 1, NETDISK_BLOCK_SIZE, disk_fd) != NETDISK_BLOCK_SIZE) {
+      log_error("(%s) NETDISK_COMMAND_READ File Error", address_port);
       reply->operation = NETDISK_REPLY_ERROR;
     } else {
-      reply->operation = NETDISK_REPLY_READ_OK;
+      log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", address_port, header->block_id, NETDISK_BLOCK_SIZE);
+      reply->operation = NETDISK_REPLY_OK;
       reply->length = NETDISK_BLOCK_SIZE;
     }
   break;
@@ -318,13 +327,17 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
     if(config.read_only) {
       reply->operation = NETDISK_REPLY_READ_ONLY;
     } else if (config.max_blocks != 0 && header->block_id>config.max_blocks) {
+      log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
       reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
     } else if(fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET)!=0) {
+      log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
       reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
     } else if(fwrite(data, reply->length, 1, disk_fd) != reply->length) {
+      log_error("(%s) NETDISK_COMMAND_WRITE File Error", address_port);
       reply->operation = NETDISK_REPLY_ERROR;
     } else {
-      reply->operation = NETDISK_REPLY_WRITE_OK;
+      log_debug("(%s) NETDISK_COMMAND_WRITE Complete, Block %d Length %d", address_port, header->block_id, header->length);
+      reply->operation = NETDISK_REPLY_OK;
     }
   break;
   default:
@@ -335,8 +348,9 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
   // Encrypt
   AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)reply, sizeof(packet_header_t)+reply->length);
   // Send
-  send(session->socket_fd, session->buffer,  sizeof(packet_header_t)+reply->length, 0);
+  send(session->socket_fd, session->buffer, sizeof(packet_header_t)+reply->length, 0);
 
+  // Free Buffer
   free(reply);
 
   return false; 
