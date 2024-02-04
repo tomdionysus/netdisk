@@ -44,7 +44,7 @@ In normal operation each side waits for and decrypts a 32 byte header packet:
 
 ```c
 struct packet_header {
-  uint16_t type;              // The type of the packet (commands, replies, etc)
+  uint16_t operation;         // The operation (commands, replies, errors etc)
   uint16_t flags;             // (Unused, Reserved) Flags for the packet
   uint32_t length;            // The length of the data following this packet
   uint64_t block_id;          // The block_id (or block offset) to be read or written
@@ -54,7 +54,7 @@ struct packet_header {
 ```
 
 If the `length` field is non-zero, the node should immediately try to receive that number of bytes, which must not exceed `NETDISK_MAX_PACKET_SIZE` and be an exact multiple of 16 (AES block size).
-The operation is then processed depending on this header and data - the `type` field is the operation:
+The operation is then processed depending on this header and data.
 
 | Command                          | Description                                                                                                                                |
 |:---------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------|

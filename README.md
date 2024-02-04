@@ -31,4 +31,3 @@ netdisk is prototype in Feb 2024 and under development. Please do not use until 
 ## Dependencies
 
 * [tiny-AES-c](deps/tiny-AES-c) - [Github](https://github.com/kokke/tiny-AES-c) 
-* [red-black-tree](deps/red-black-tree) (Fork) - [Original Github](https://github.com/tomdionysus/red-black-tree)

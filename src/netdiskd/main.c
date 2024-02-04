@@ -183,10 +183,9 @@ void* handle_connection(void* arg) {
           // Set State
           session->state = NETDISK_SESSION_STATE_HANDSHAKE;
         } else if (recvlen == -999) {
-          log_error("Timeout, closing connection");
+          log_warn("Timeout, closing connection");
           running = false;
         } else {
-          log_error("Shutdown, closing connection");
           running = false;
         }
         break;
@@ -214,10 +213,9 @@ void* handle_connection(void* arg) {
           // Set state ready
           session->state = NETDISK_SESSION_STATE_READY;
         } else if (recvlen == -999) {
-          log_error("Timeout, closing connection");
+          log_warn("Timeout");
           running = false;
         } else {
-          log_error("Shutdown, closing connection");
           running = false;
         }
         break;
@@ -252,7 +250,6 @@ void* handle_connection(void* arg) {
         } else if (recvlen == -999) {
           // Do Nothing
         } else {
-          log_error("Shutdown, closing connection");
           running = false;
         }
         break;
@@ -260,6 +257,7 @@ void* handle_connection(void* arg) {
   }
 
   // Close socket
+  log_error("Shutdown, closing connection");
   close(session->socket_fd);
 
   // Free Session Buffer
