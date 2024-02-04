@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -17,104 +17,179 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 #include "packet.h"
-#include "util.h"
 
 const u8 NETDISK_MAGIC_NUMBER[] = {0x4E, 0x54, 0x44, 0x53, 0x4B};
 
-void packet_init(packet_t *packet) {
-  // Set all to zero
-  memset(packet, 0, sizeof(packet_t));
+int packet_create_client_socket(struct socket **tcp_socket, struct sockaddr_in *addr) {
+  int ret;
+
+  // Create TCP socket
+  ret = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP, tcp_socket);
+  if (ret < 0) {
+    printk(KERN_ERR "Error creating socket: %d\n", ret);
+    return ret;
+  }
+
+  // Connect the socket to the server address
+  ret = kernel_connect(*tcp_socket, (struct sockaddr *)addr, sizeof(*addr), 0);
+  if (ret < 0) {
+    sock_release(*tcp_socket);
+    printk(KERN_ERR "Error connecting socket: %d\n", ret);
+    return ret;
+  }
+
+  return 0;
+}
+
+int packet_destroy_socket(struct socket *tcp_socket) {
+  if (tcp_socket) {
+    sock_release(tcp_socket);
+    tcp_socket = NULL;
+  }
+  return 0;
+}
+
+void packet_handshake_init(packet_handshake_t *packet) {
+  memset(packet, 0, sizeof(packet_handshake_t));
 
   // Initialize magic array
-  memcpy(packet->fields.magic, NETDISK_MAGIC_NUMBER, sizeof(NETDISK_MAGIC_NUMBER));
+  memcpy(packet->magic, NETDISK_MAGIC_NUMBER, NETDISK_MAGIC_NUMBER_LENGTH);
 
   // Initialize version
-  packet->fields.version.major = NETDISK_VERSION_MAJOR;
-  packet->fields.version.minor = NETDISK_VERSION_MINOR;
-  packet->fields.version.patch = NETDISK_VERSION_PATCH;
-
-  // Timestamp
-	struct timespec64 ts;
-	ktime_get_real_ts64(&ts);
-  packet->fields.timestamp = (long long)ts.tv_sec;
-
-  // tx_rx_queue item
-  INIT_LIST_HEAD(&packet->rx_tx_list);
+  packet->version.major = NETDISK_VERSION_MAJOR;
+  packet->version.minor = NETDISK_VERSION_MINOR;
+  packet->version.patch = NETDISK_VERSION_PATCH;
 }
 
-bool packet_magic_check(packet_t *packet) { return memcmp(packet->fields.magic, NETDISK_MAGIC_NUMBER, sizeof(NETDISK_MAGIC_NUMBER)) == 0; }
+bool packet_magic_check(packet_handshake_t *packet) { return memcmp(packet->magic, NETDISK_MAGIC_NUMBER, NETDISK_MAGIC_NUMBER_LENGTH) == 0; }
 
-bool packet_version_check(packet_t *packet, bool strict) {
-  return packet->fields.version.major == NETDISK_VERSION_MAJOR && packet->fields.version.minor == NETDISK_VERSION_MINOR &&
-         (!strict || packet->fields.version.patch == NETDISK_VERSION_PATCH);
+bool packet_version_check(packet_handshake_t *packet, bool strict) {
+  return packet->version.major == NETDISK_VERSION_MAJOR && packet->version.minor == NETDISK_VERSION_MINOR &&
+         (!strict || packet->version.patch == NETDISK_VERSION_PATCH);
 }
 
-int packet_send(packet_t *packet, u8 *key) {
-  // printk(KERN_DEBUG "netdisk: sending %s from %pI4:%u\n", packet_command_to_str(packet->fields.command), &packet->addr.sin_addr, ntohs(packet->addr.sin_port));
+ssize_t packet_recv(struct socket *tcp_socket, uint8_t *buffer, size_t size, int timeout_ms) {
+  struct msghdr msg;
+  struct kvec vec;
+  size_t total_received = 0;
+  int ret;
+  long original_timeout = tcp_socket->sk->sk_rcvtimeo;
+  long timeout_jiffies = msecs_to_jiffies(timeout_ms);
 
-  // Initialise IV
-  get_random_bytes(packet->iv, NETDISK_KEY_SIZE);
+  // Initialize message and vector structures
+  memset(&msg, 0, sizeof(msg));
+  vec.iov_base = buffer;
+  vec.iov_len = size;
 
-  // Do encrpytion
-  struct AES_ctx ctx;
-  AES_init_ctx_iv(&ctx, key, packet->iv);
-  AES_CBC_encrypt_buffer(&ctx, (u8 *)&(packet->data), NETDISK_MAX_PACKET_SIZE);
+  // Receive loop
+  while (total_received < size) {
+    // Set the socket to use the timeout
+    tcp_socket->sk->sk_rcvtimeo = timeout_jiffies;
 
-  // Send the packet
-  if (send_udp_packet((const char *)packet, NETDISK_TOTAL_PACKET_SIZE, &packet->addr) != NETDISK_TOTAL_PACKET_SIZE) {
-    return NETDISK_PACKET_STATUS_SEND_FAILED;
+    ret = kernel_recvmsg(tcp_socket, &msg, &vec, 1, size - total_received, MSG_WAITALL);
+
+    if (ret == -EAGAIN || ret == -EWOULDBLOCK) {
+      // Timeout
+      ret = -999;
+      break;
+    } else if (ret <= 0) {
+      // Error or connection closed
+      break;
+    }
+
+    total_received += ret;
+    vec.iov_base = buffer + total_received;
+    vec.iov_len = size - total_received;
   }
 
-  // All good
-  return NETDISK_PACKET_STATUS_OK;
+  // Restore original timeout
+  tcp_socket->sk->sk_rcvtimeo = original_timeout;
+
+  return ret < 0 ? ret : total_received;
 }
 
-int packet_recv(packet_t *packet, u8 *key, bool strict_version) {
-  // Do the receive
-  ssize_t recv_len = receive_udp_packet((char *)packet, NETDISK_TOTAL_PACKET_SIZE, &packet->addr); 
+ssize_t packet_send(struct socket *tcp_socket, uint8_t *buffer, size_t size) {
+  struct msghdr msg;
+  struct kvec vec;
+  size_t total_sent = 0;
+  int ret;
 
-  // Timeout, no packet received
-  if (recv_len == -1) {
-    return NETDISK_PACKET_STATUS_UNKNOWN_ERROR;
+  // Initialize message and vector structures
+  memset(&msg, 0, sizeof(msg));
+  vec.iov_base = buffer;
+  vec.iov_len = size;
+
+  // Send loop
+  while (total_sent < size) {
+    ret = kernel_sendmsg(tcp_socket, &msg, &vec, 1, size - total_sent);
+
+    if (ret < 0) {
+      // An error occurred during send
+      return ret;
+    }
+
+    total_sent += ret;
+    vec.iov_base = buffer + total_sent;
+    vec.iov_len = size - total_sent;
   }
 
-  // Check packet size
-  if (recv_len != NETDISK_TOTAL_PACKET_SIZE) return NETDISK_PACKET_STATUS_BAD_LENGTH;
+  return total_sent;
+}
 
-  // Decrypt packet
-  struct AES_ctx ctx;
-  AES_init_ctx_iv(&ctx, key, packet->iv);
-  AES_CBC_decrypt_buffer(&ctx, (u8 *)&(packet->data), NETDISK_MAX_PACKET_SIZE);
+void send_chunk_request(struct socket *tcp_socket, struct AES_ctx *context, transaction_t *trans, chunk_t *chunk) {
+  packet_header_t *header = kmalloc(sizeof(packet_header_t) + chunk->size, GFP_KERNEL);
+  void *data = header + sizeof(packet_header_t);
 
-  // Check Magic Number (Key is OK)
-  if (!packet_magic_check(packet)) return NETDISK_PACKET_STATUS_BAD_KEY;
+  if (rq_data_dir(trans->request) == WRITE) {
+    header->operation = NETDISK_COMMAND_WRITE;
+    header->length = SECTOR_SIZE;
+    memcpy(data, chunk->buffer, chunk->size);
+  } else {
+    header->operation = NETDISK_COMMAND_READ;
+    header->length = 0;
+  }
 
-  // Check version
-  if (!packet_version_check(packet, strict_version)) return NETDISK_PACKET_STATUS_BAD_VERSION;
+  header->block_id = chunk->block_id;
+  header->transaction_id = trans->id;
+  header->user_data = 0;
 
-  // All good
-  return NETDISK_PACKET_STATUS_OK;
+  // Encrypt
+  AES_CBC_encrypt_buffer(context, (uint8_t *)header, sizeof(packet_header_t) + header->length);
+
+  // Send
+  packet_send(tcp_socket, (uint8_t *)header, sizeof(packet_header_t) + header->length);
+
+  kfree(header);
 }
 
 const char *packet_command_to_str(u16 command) {
-  switch(command) {
-    case NETDISK_COMMAND_START: return "NETDISK_COMMAND_START";
-    case NETDISK_COMMAND_STOP: return "NETDISK_COMMAND_STOP";
-    case NETDISK_COMMAND_READ: return "NETDISK_COMMAND_READ";
-    case NETDISK_COMMAND_WRITE: return "NETDISK_COMMAND_WRITE";
-    default: return "Unknown Command";
+  switch (command) {
+    case NETDISK_COMMAND_INFO:
+      return "NETDISK_COMMAND_INFO";
+    case NETDISK_COMMAND_READ:
+      return "NETDISK_COMMAND_READ";
+    case NETDISK_COMMAND_WRITE:
+      return "NETDISK_COMMAND_WRITE";
+    default:
+      return "Unknown Command";
   }
 }
 
 const char *packet_reply_to_str(u16 reply) {
-  switch(reply) {
-    case NETDISK_REPLY_OK: return "NETDISK_REPLY_OK";
-    case NETDISK_REPLY_READ_OK: return "NETDISK_REPLY_READ_OK";
-    case NETDISK_REPLY_WRITE_OK: return "NETDISK_REPLY_WRITE_OK";
-    case NETDISK_REPLY_READ_ONLY: return "NETDISK_REPLY_READ_ONLY";
-    case NETDISK_REPLY_OUT_OF_RANGE: return "NETDISK_REPLY_OUT_OF_RANGE";
-    case NETDISK_REPLY_ERROR: return "NETDISK_REPLY_ERROR";
-    default: return "Unknown Reply";
+  switch (reply) {
+    case NETDISK_REPLY_OK:
+      return "NETDISK_REPLY_OK";
+    case NETDISK_REPLY_INFO:
+      return "NETDISK_REPLY_INFO";
+    case NETDISK_REPLY_READ_ONLY:
+      return "NETDISK_REPLY_READ_ONLY";
+    case NETDISK_REPLY_OUT_OF_RANGE:
+      return "NETDISK_REPLY_OUT_OF_RANGE";
+    case NETDISK_REPLY_UNKNOWN_COMMAND:
+      return "NETDISK_REPLY_UNKNOWN_COMMAND";
+    case NETDISK_REPLY_ERROR:
+      return "NETDISK_REPLY_ERROR";
+    default:
+      return "Unknown Reply";
   }
-
 }

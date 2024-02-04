@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -17,15 +17,15 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 //
-// This is a heavily modified version of tiny-AES-c 
+// This is a heavily modified version of tiny-AES-c
 // (https://github.com/kokke/tiny-AES-c)
 //
 #ifndef NETDISK_UTIL
 #define NETDISK_UTIL
 
+#include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
-#include <linux/errno.h>
 
 int parse_key(const char *hex_str, u8 *key);
 void buffer_to_hex_string(const u8 *buffer, size_t buffer_size, char *hex_string, size_t hex_string_size);

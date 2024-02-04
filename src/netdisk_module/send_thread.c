@@ -1,144 +1,117 @@
-#include <linux/kthread.h>
-#include <linux/mutex.h>
-
-#include "udp_socket.h"
-#include "packet.h"
-
-#include "module.h"
+//
+// /dev/netdisk device driver
+//
+// Copyright (C) 2024 Tom Cully
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
 #include "send_thread.h"
 
-// Externs
-extern netdisk_config_t config;
+#include "netdisk_device.h"
+#include "packet.h"
 
-// Thread pointer
+extern session_t *session;
+
 static struct task_struct *send_thread = NULL;
-
-static DEFINE_MUTEX(tx_queue_mutex);
-static DECLARE_WAIT_QUEUE_HEAD(data_available_wq);
-static DECLARE_WAIT_QUEUE_HEAD(space_available_wq);
-static struct list_head tx_queue;
-static int tx_queue_size = 0;
+static DECLARE_WAIT_QUEUE_HEAD(wait_queue);
+static LIST_HEAD(chunk_queue);
+static DEFINE_MUTEX(queue_mutex);
+static bool thread_running = false;
 
 static int run_send_thread(void *data) {
-    // Init tx_queue
-    INIT_LIST_HEAD(&tx_queue);
-    
-    // Buffer
-    packet_t *packet = NULL;
+  chunk_request_t *req;
+  while (thread_running || !list_empty(&chunk_queue)) {
+    wait_event_interruptible(wait_queue, !list_empty(&chunk_queue) || !thread_running);
 
-    printk(KERN_DEBUG "netdisk: send_thread startup\n");
+    if (!thread_running && list_empty(&chunk_queue)) break;
 
-    while (!kthread_should_stop()) {
-      // Wait for a packet to send
-      wait_event_interruptible(data_available_wq, tx_queue_size > 0); 
-      if (kthread_should_stop()) break;  // send_thread was told to stop
+    mutex_lock(&queue_mutex);
+    if (!list_empty(&chunk_queue)) {
+      req = list_first_entry(&chunk_queue, chunk_request_t, list);
+      list_del(&req->list);
+      mutex_unlock(&queue_mutex);
 
-      mutex_lock(&tx_queue_mutex);
-      if(tx_queue_size == 0) {
-        mutex_unlock(&tx_queue_mutex);
-        continue;
-      }
+      send_chunk_request(session->socket_fd, &session->tx_aes_context, req->transaction, req->chunk);
 
-      // New packet
-      packet = list_first_entry(&tx_queue, packet_t, rx_tx_list);
-      list_del(&(packet->rx_tx_list));
-      INIT_LIST_HEAD(&packet->rx_tx_list);
-      tx_queue_size--;
-      mutex_unlock(&tx_queue_mutex);
-      
-      wake_up(&space_available_wq);
-
-      // Send Packet
-      int res = packet_send(packet, config.key);
-      if(res != NETDISK_PACKET_STATUS_OK) {
-        printk(KERN_ALERT "netdisk: packet_send failed (%d)\n", res);
-      }
-
-      kfree(packet);
-    }
-
-    // Free last unused packet buffer
-    if(packet) kfree(packet);
-
-    printk(KERN_DEBUG "netdisk: send_thread shutdown\n");
-
-    return 0;
-}
-
-int send_packet_enqueue(packet_t* packet) {
-  wait_event_interruptible(space_available_wq, tx_queue_size < 100);
-
-  mutex_lock(&tx_queue_mutex);
-  if(tx_queue_size >= 100) {
-    mutex_unlock(&tx_queue_mutex);
-    return -EINTR;
-  }
-
-  // Add it to the queue
-  INIT_LIST_HEAD(&packet->rx_tx_list);
-  list_add_tail(&packet->rx_tx_list, &tx_queue);
-  tx_queue_size++;
-  mutex_unlock(&tx_queue_mutex);
-  
-  wake_up(&data_available_wq); // Notify space available
-
-  return 0;
-}
-
-int send_chunk_request(transaction_t *trans, chunk_t *chk) {
-  printk(KERN_DEBUG "netdisk: send_chunk_request (transaction %llu, block_id %llu)", trans->id, chk->block_id);
-
-    // Make a packet
-    packet_t *packet = kmalloc(sizeof(packet_t), GFP_KERNEL);
-    packet_init(packet);
-
-    // Fill in transaction id, block offset
-    packet->fields.block_offset = chk->block_id;
-    packet->fields.user_data = trans->id;
-    packet->addr = config.address;
-
-    if(rq_data_dir(trans->orig_rq) == WRITE) {
-        packet->fields.command = NETDISK_COMMAND_WRITE;
-        memcpy(packet->fields.payload, chk->data, chk->size);
+      kfree(req);
     } else {
-        packet->fields.command = NETDISK_COMMAND_READ;
+      mutex_unlock(&queue_mutex);
     }
-    return send_packet_enqueue(packet);
-}
-
-
-// Create send_thread
-int send_thread_start(void) {
-  if(send_thread != NULL) {
-    printk(KERN_ALERT "netdisk: send_thread_start called but thread already started\n");
-    return 0;
   }
 
-  printk(KERN_DEBUG "Starting send thread\n");
-    
-    send_thread = kthread_run(run_send_thread, NULL, "run_send_thread");
-    if (IS_ERR(send_thread)) {
-        printk(KERN_INFO "netdisk: failed to create run_send_thread\n");
-        return PTR_ERR(send_thread);
-    }
-  
-  printk(KERN_DEBUG "Started send thread\n");
+  // Drain the queue
+  mutex_lock(&queue_mutex);
+  while (!list_empty(&chunk_queue)) {
+    req = list_first_entry(&chunk_queue, chunk_request_t, list);
+    list_del(&req->list);
+
+    netdisk_error_chunk(req->transaction->id, req->chunk->block_id, -1);
+
+    kfree(req);  // Free the chunk request
+  }
+  mutex_unlock(&queue_mutex);
+
+  thread_running = false;
+  send_thread = NULL;
 
   return 0;
 }
 
-void send_thread_stop(void) {
-  if(send_thread == NULL) {
-    printk(KERN_ALERT "netdisk: send_thread_stop called but thread not started\n");
+void send_thread_start(void) {
+  if (send_thread) {
+    printk(KERN_INFO "netdisk: Send thread already started\n");
     return;
   }
 
-  // Stop the send_thread
-  if (send_thread) {
-    printk(KERN_DEBUG "Stopping send thread\n");
-    kthread_stop(send_thread);
-    printk(KERN_DEBUG "Stopped send thread\n");
+  thread_running = true;
+  send_thread = kthread_run(run_send_thread, NULL, "netdisk_send_thread");
+  if (IS_ERR(send_thread)) {
+    printk(KERN_ERR "netdisk: Failed to start send thread\n");
+    thread_running = false;
     send_thread = NULL;
   }
 }
 
+void enqueue_chunk(transaction_t *transaction, chunk_t *chunk) {
+  chunk_request_t *req = kmalloc(sizeof(*req), GFP_KERNEL);
+  if (!req) {
+    printk(KERN_ERR "netdisk: Failed to allocate chunk request\n");
+    return;
+  }
+
+  req->transaction = transaction;
+  req->chunk = chunk;
+  mutex_lock(&queue_mutex);
+  list_add_tail(&req->list, &chunk_queue);
+  mutex_unlock(&queue_mutex);
+  wake_up(&wait_queue);
+}
+
+void send_thread_stop(void) {
+  if (!send_thread) {
+    printk(KERN_INFO "netdisk: Send thread not running\n");
+    return;
+  }
+
+  printk(KERN_DEBUG "netdisk: Stopping send thread\n");
+
+  // Set the flag to false to stop the thread and wake it up
+  thread_running = false;
+  wake_up(&wait_queue);
+
+  // Wait for the thread to finish
+  kthread_stop(send_thread);
+  send_thread = NULL;
+  printk(KERN_DEBUG "netdisk: Stopped send thread\n");
+}

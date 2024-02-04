@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 //
-// This is a heavily modified version of tiny-AES-c 
+// This is a heavily modified version of tiny-AES-c
 // (https://github.com/kokke/tiny-AES-c)
 //
 #ifndef NETDISK_MODULE
@@ -25,16 +25,17 @@
 
 #include <linux/net.h>
 #include <linux/rbtree.h>
+#include <linux/socket.h>
 #include <net/sock.h>
 
 #include "packet.h"
 
 typedef struct netdisk_config {
-	// Parameters
-	struct sockaddr_in address;
-	u16 port;
-	u8 key[NETDISK_KEY_SIZE];
-	char *devicename;
+  // Parameters
+  struct sockaddr_in address;
+  u16 port;
+  u8 key[NETDISK_KEY_SIZE];
+  char *devicename;
 } netdisk_config_t;
 
 int load_parameters(void);

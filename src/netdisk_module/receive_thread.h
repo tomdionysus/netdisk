@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -17,16 +17,21 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 //
-// This is a heavily modified version of tiny-AES-c 
+// This is a heavily modified version of tiny-AES-c
 // (https://github.com/kokke/tiny-AES-c)
 //
 #ifndef NETDISK_RECEIVE_THREAD
 #define NETDISK_RECEIVE_THREAD
 
+#include <linux/kthread.h>
+#include <linux/mutex.h>
+#include <linux/socket.h>
+#include <net/sock.h>
+
 #include "packet.h"
 
 int receive_thread_start(void);
-int wait_for_packet(packet_t** packet);
+bool process_packet(session_t* session, packet_header_t* header, uint8_t* data);
 void receive_thread_stop(void);
 
 #endif

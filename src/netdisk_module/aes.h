@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -17,19 +17,19 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 //
-// This is a heavily modified version of tiny-AES-c 
+// This is a heavily modified version of tiny-AES-c
 // (https://github.com/kokke/tiny-AES-c)
 //
 #ifndef AES
 #define AES
+#include <linux/types.h>
 
-#define AES_BLOCKLEN 16 // Block length in bytes - AES is 128b block only
+#define AES_BLOCKLEN 16  // Block length in bytes - AES is 128b block only
 
 #define AES_KEYLEN 32
 #define AES_keyExpSize 240
 
-struct AES_ctx
-{
+struct AES_ctx {
   u8 RoundKey[AES_keyExpSize];
   u8 Iv[AES_BLOCKLEN];
 };
@@ -37,7 +37,7 @@ struct AES_ctx
 void AES_init_ctx(struct AES_ctx* ctx, const u8* key);
 void AES_init_ctx_iv(struct AES_ctx* ctx, const u8* key, const u8* iv);
 void AES_ctx_set_iv(struct AES_ctx* ctx, const u8* iv);
-void AES_CBC_encrypt_buffer(struct AES_ctx *ctx, u8* buf, size_t length);
+void AES_CBC_encrypt_buffer(struct AES_ctx* ctx, u8* buf, size_t length);
 void AES_CBC_decrypt_buffer(struct AES_ctx* ctx, u8* buf, size_t length);
 
 #endif

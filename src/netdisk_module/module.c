@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -22,23 +22,20 @@
 //
 // Tested under linux 6.6.7-0-lts
 //
-#include <linux/module.h>
+#include "module.h"
+
 #include <linux/kernel.h>
 #include <linux/kthread.h>
-#include <linux/wait.h>
-#include <linux/skbuff.h>
 #include <linux/list.h>
+#include <linux/module.h>
+#include <linux/skbuff.h>
 #include <linux/types.h>
+#include <linux/wait.h>
 
-#include "module.h"
-#include "packet.h"
-#include "udp_socket.h"
 #include "netdisk_device.h"
-#include "transaction.h"
+#include "packet.h"
 #include "receive_thread.h"
 #include "send_thread.h"
-#include "timeout_thread.h"
-#include "process_packet_thread.h"
 #include "util.h"
 
 // Parameters
@@ -49,6 +46,9 @@ static ushort port = NETDISK_DEFAULT_PORT;
 
 // Config
 netdisk_config_t config;
+
+// Socket
+struct socket *client_socket;
 
 // Parameters
 module_param(address, charp, 0000);
@@ -64,86 +64,66 @@ module_param(devicename, charp, 0000);
 MODULE_PARM_DESC(devicename, "Device name");
 
 int load_parameters(void) {
-    if (!address || in4_pton(address, -1, (u8 *)&(config.address.sin_addr), '\0', NULL) == 0) {
-        printk(KERN_ALERT "netdisk: address must be a valid IP address\n");
-        return -EINVAL;
-    }
+  if (!address || in4_pton(address, -1, (u8 *)&(config.address.sin_addr), '\0', NULL) == 0) {
+    printk(KERN_ALERT "netdisk: address must be a valid IP address\n");
+    return -EINVAL;
+  }
 
-    config.address.sin_family = AF_INET;
-    config.address.sin_port = htons(port);
+  config.address.sin_family = AF_INET;
+  config.address.sin_port = htons(port);
 
-    if (!key || strlen(key) != 64 || parse_key(key, config.key) == -EINVAL) {
-        printk(KERN_ALERT "netdisk: key must be a 64 character hex value\n");
-        return -EINVAL;
-    }
+  if (!key || strlen(key) != 64 || parse_key(key, config.key) == -EINVAL) {
+    printk(KERN_ALERT "netdisk: key must be a 64 character hex value\n");
+    return -EINVAL;
+  }
 
-    config.devicename = devicename;
-    return 0;
+  config.devicename = devicename;
+  return 0;
 }
 
-static int __init netdisk_driver_init(void)
-{
-    // Validate parameters
-    if(load_parameters() == -EINVAL) {
-        return -EINVAL;
-    }
+static int __init netdisk_driver_init(void) {
+  // Validate parameters
+  if (load_parameters() == -EINVAL) {
+    return -EINVAL;
+  }
 
-    // Create transaction registry
-    create_transaction_registry();
+  // Create Socket
+  if (packet_create_client_socket(&client_socket, &config.address) != 0) {
+    printk(KERN_ALERT "netdisk: cannot connect to server: %pI4 port: %hu\n", &config.address.sin_addr, ntohs(config.address.sin_port));
+    return -EINVAL;
+  }
 
-    // Create UDP Socket
-    if(create_udp_socket()!=0) {
-        return -EINVAL;
-    }
+  // Receive Thread
+  receive_thread_start();
 
-    // TX/RX Start
-    receive_thread_start();
-    send_thread_start();
+  // Send Thread
+  send_thread_start();
 
-    // Create timeout thread
-    timeout_thread_start();
+  // Start Device
+  create_netdisk_device(config.devicename, client_socket);
 
-    // Send NETDISK_COMMAND_START
-    packet_t *packet = kmalloc(sizeof(packet_t), GFP_KERNEL);
-    packet_init(packet);
-    packet->fields.command = NETDISK_COMMAND_START;
-    packet->addr = config.address;
-    send_packet_enqueue(packet);
+  // Loaded Banner
+  printk(KERN_DEBUG "netdisk: Module loaded. Server: %pI4 Port: %hu, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port),
+         config.devicename);
 
-    // Start Device
-    create_netdisk_device(config.devicename);
-
-    // Start packet processor
-    process_packet_thread_start();
-
-    // Loaded Banner
-    char displaykey[65];
-    buffer_to_hex_string(config.key, 32, displaykey, 65);
-    printk(KERN_DEBUG "netdisk: Module loaded. Server: %pI4 Port: %hu, Key: %s, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port), displaykey, config.devicename);
-
-    return 0;
+  return 0;
 }
 
-static void __exit netdisk_driver_exit(void)
-{
-    // Stop packet processor
-    process_packet_thread_stop();
+static void __exit netdisk_driver_exit(void) {
+  // Release device
+  release_netdisk_device();
 
-    // TX/RX Stop
-    send_thread_stop();
-    receive_thread_stop();
+  // Send Thread
+  send_thread_stop();
 
-    // Timeout thread stop
-    timeout_thread_stop();
+  // Receive Thread
+  receive_thread_stop();
 
-    // Release device
-    release_netdisk_device();
+  // Kill all transactions
+  release_all_transactions();
 
-    // Release UDP socket
-    release_udp_socket();
-
-    // Release the transaction registry
-    release_transaction_registry();
+  // Release socket
+  packet_destroy_socket(client_socket);
 }
 
 module_init(netdisk_driver_init);

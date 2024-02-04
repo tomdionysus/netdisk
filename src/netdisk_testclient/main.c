@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
           }
           // If there's more data, receive it
           if (header->length > 0) {
-            if (packet_recv(session->socket_fd, session->buffer + sizeof(packet_header_t), sizeof(packet_header_t), 10000) != header->length) {
+            if (packet_recv(session->socket_fd, session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
               log_warn("Timeout receiving packet data (%d bytes)", header->length);
               running = false;
               break;

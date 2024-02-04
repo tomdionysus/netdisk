@@ -1,7 +1,6 @@
-
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -18,76 +17,44 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 //
-// This is a heavily modified version of tiny-AES-c 
+// This is a heavily modified version of tiny-AES-c
 // (https://github.com/kokke/tiny-AES-c)
 //
 #ifndef NETDISK_TRANSACTION
 #define NETDISK_TRANSACTION
 
 #include <linux/rbtree.h>
-#include <linux/kernel.h>
-#include <linux/blkdev.h>
-#include <linux/bio.h>
-#include <linux/mutex.h>
 #include <linux/slab.h>
-#include <linux/list.h>
-#include <linux/ktime.h>
-#include <linux/blk-mq.h>
+#include <linux/types.h>
 
-// Define a structure for each chunk of the transaction
 typedef struct chunk {
-    u64 block_id;
-    void *data;
-    size_t size;
-    struct rb_node node;
-    bool complete;
-
-    // Timeout, retransmit
-    ktime_t timeout;
-    u8 retries;
-
-    // Used for completion order
-    struct list_head chunk_list;
-
-    // Used for removal list
-    struct list_head remove_list;
+  u64 block_id;
+  u8* buffer;
+  u32 size;
+  struct rb_node node;  // Red/Black tree node
 } chunk_t;
 
-// Define the structure for the entire transaction
 typedef struct transaction {
-    u64 id;
-    struct request *orig_rq;
-    struct list_head chunks;
-    
-    struct mutex chunk_mutex;
+  u64 id;
+  u32 total_chunks;
+  u32 total_bytes;
+  u32 completed_chunks;
+  u32 completed_bytes;
+  struct request* request;
+  struct rb_root chunk_tree;  // Red/Black tree root for chunks
 
-    // Used for fast node lookup
-    struct rb_node node;
-    struct rb_root chunk_tree;
-
-    // Used to timeout transactions
-    ktime_t timeout;
-    struct list_head remove_list;
-
-    u64 total_bytes;
-    u64 completed_bytes;
-    u64 total_chunks;
-    u64 completed_chunks;
+  struct rb_node node;  // Red/Black tree node
 } transaction_t;
 
-transaction_t *create_transaction(u64 id, struct request *rq);
-int insert_transaction(transaction_t *trans);
-transaction_t *find_transaction(u64 id);
-void release_transaction(transaction_t *trans);
+transaction_t* create_transaction(u64 id, struct request* rq);  // Allocate and return a new trasaction with the given id and an empty chunk tree.
+transaction_t* find_transaction(u64 id);                        // Return the transaction with the given id or NULL.
+void release_transaction(u64 id);                               // Release the given transaction, and release all of its owned chunks
 
-void release_timed_out_transactions(void);
+void release_all_transactions(void);
 
-chunk_t* create_chunk(transaction_t *trans, u64 block_id, void *data, size_t size);
-int insert_chunk(transaction_t *trans, chunk_t *chk);
-chunk_t *find_chunk(transaction_t *trans, u64 block_id);
-void remove_completed_chunks(transaction_t *trans);
-
-int create_transaction_registry(void);
-int release_transaction_registry(void);
+chunk_t* create_chunk(transaction_t* trans, u32 block_id, u8* buffer,
+                      u32 size);                          // Allocate and setup a new chunk, add it to the transaction tree, and return it.
+chunk_t* find_chunk(transaction_t* trans, u32 block_id);  // Return the chunk with the given block_id or NULL
+void release_chunk(transaction_t* trans, u32 block_id);   // Find, remove from the transaction, and release the chunk with the given block_id
 
 #endif

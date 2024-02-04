@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -19,38 +19,46 @@
 #ifndef PACKET
 #define PACKET
 
-#include <linux/net.h>
-#include <net/sock.h>
-#include <linux/types.h>
-#include <linux/time.h>
+#include <linux/blk-mq.h>
 #include <linux/ktime.h>
-#include <linux/timekeeping.h>
+#include <linux/net.h>
 #include <linux/random.h>
+#include <linux/slab.h>
+#include <linux/time.h>
+#include <linux/timekeeping.h>
+#include <linux/types.h>
+#include <net/sock.h>
 
 #include "aes.h"
-#include "udp_socket.h"
+#include "transaction.h"
+#include "util.h"
 
 #define NETDISK_DEFAULT_PORT 26547
 
 #define NETDISK_BLOCK_SIZE 512
 #define NETDISK_BLOCK_SHIFT 9
 #define NETDISK_HEADER_SIZE 64
-#define NETDISK_MAX_PACKET_SIZE (NETDISK_BLOCK_SIZE + NETDISK_HEADER_SIZE)
+#define NETDISK_MAX_PACKET_SIZE 544
 #define NETDISK_KEY_SIZE 32
-#define NETDISK_TOTAL_PACKET_SIZE (NETDISK_MAX_PACKET_SIZE + NETDISK_KEY_SIZE)
 
 #define NETDISK_VERSION_MAJOR 0x00
 #define NETDISK_VERSION_MINOR 0x00
 #define NETDISK_VERSION_PATCH 0x01
 
-#define NETDISK_COMMAND_START 0x0001
-#define NETDISK_COMMAND_STOP 0x0002
-#define NETDISK_COMMAND_READ 0x0003
-#define NETDISK_COMMAND_WRITE 0x0004
+#define NETDISK_SESSION_STATE_INITIAL 0
+#define NETDISK_SESSION_STATE_IV 1
+#define NETDISK_SESSION_STATE_HANDSHAKE 2
+#define NETDISK_SESSION_STATE_READY 3
+
+#define NETDISK_COMMAND_INFO 0x0001
+#define NETDISK_COMMAND_READ 0x0002
+#define NETDISK_COMMAND_WRITE 0x0003
 
 #define NETDISK_REPLY_OK 0x8001
-#define NETDISK_REPLY_READ_ONLY 0x8002
-#define NETDISK_REPLY_OUT_OF_RANGE 0x8003
+#define NETDISK_REPLY_INFO 0x8002
+#define NETDISK_REPLY_READ_ONLY 0x8101
+#define NETDISK_REPLY_OUT_OF_RANGE 0x8102
+#define NETDISK_REPLY_UNKNOWN_COMMAND 0xFFFE
 #define NETDISK_REPLY_ERROR 0xFFFF
 
 #define NETDISK_PACKET_STATUS_OK 0
@@ -66,51 +74,62 @@
 #define NETDISK_PACKET_SOCKET_OK 0
 #define NETDISK_PACKET_SOCKET_CREATE_FAILED 1
 #define NETDISK_PACKET_SOCKET_BIND_FAILED 2
+#define NETDISK_PACKET_SOCKET_LISTEN_FAILED 3
+#define NETDISK_PACKET_SOCKET_CONNECT_FAILED 4
 
-extern const u8 NETDISK_MAGIC_NUMBER[];
+extern const uint8_t NETDISK_MAGIC_NUMBER[];
+#define NETDISK_MAGIC_NUMBER_LENGTH 4
 
 #pragma pack(push, 1)
 
-typedef struct packet {
-  u8 iv[NETDISK_KEY_SIZE];
+typedef struct session {
+  struct socket* socket_fd;
+  struct sockaddr_in remote_addr;
+  uint8_t state;
+  struct AES_ctx rx_aes_context;
+  struct AES_ctx tx_aes_context;
+  uint64_t node_id;
+  char address_str[32];
+  uint8_t* buffer;
+} session_t;
 
-  union {
-    u8 data[NETDISK_MAX_PACKET_SIZE];
-    struct fields {
-      u8 magic[5];
-      struct version {
-        u8 major;
-        u8 minor;
-        u8 patch;
-      } version;
-      u16 command;
-      u16 reply;
-      u32 sequence;
-      u64 timestamp;
-      u64 block_offset;
-      u64 user_data;
-      u8 _reserved[24];
-      u8 payload[NETDISK_BLOCK_SIZE];
-    } fields;
-  };
+// Should be exactly 16 bytes long.
+typedef struct packet_handshake {
+  uint8_t magic[4];
+  struct {
+    uint8_t major;
+    uint8_t minor;
+    uint8_t patch;
+    uint8_t _reserved;
+  } version;
+  uint64_t node_id;
+} packet_handshake_t;
 
-  struct list_head rx_tx_list;
-  struct sockaddr_in addr;
-} packet_t;
-
-typedef struct command_start_stop_payload {
-  u64 node_id;
-} command_start_stop_payload_t;
+// Should be exactly 32 bytes long.
+typedef struct packet_header {
+  uint16_t operation;       // The operation (commands, replies, errors etc)
+  uint16_t flags;           // (Unused, Reserved) Flags for the packet
+  uint32_t length;          // The length of the data following this packet
+  uint64_t block_id;        // The block_id (or block offset) to be read or written
+  uint64_t transaction_id;  // The transaction ID for this read or write
+  uint64_t user_data;       // (Unused) Any user data to be included in the reply.
+} packet_header_t;
 
 #pragma pack(pop)
 
-void packet_init(packet_t* packet);
-bool packet_magic_check(packet_t* packet);
-bool packet_version_check(packet_t* packet, bool strict);
-int packet_send(packet_t* packet, u8* key);
-int packet_recv(packet_t* packet, u8* key, bool strict_version);
+int packet_create_client_socket(struct socket** tcp_socket, struct sockaddr_in* addr);
+int packet_destroy_socket(struct socket* tcp_socket);
 
-const char *packet_command_to_str(u16 command);
-const char *packet_reply_to_str(u16 reply);
+ssize_t packet_recv(struct socket* tcp_socket, uint8_t* buffer, size_t size, int timeout_ms);
+ssize_t packet_send(struct socket* tcp_socket, uint8_t* buffer, size_t size);
+
+void send_chunk_request(struct socket* tcp_socket, struct AES_ctx* context, transaction_t* trans, chunk_t* chunk);
+
+void packet_handshake_init(packet_handshake_t* packet);
+bool packet_magic_check(packet_handshake_t* packet);
+bool packet_version_check(packet_handshake_t* packet, bool strict);
+
+const char* packet_command_to_str(u16 command);
+const char* packet_reply_to_str(u16 reply);
 
 #endif

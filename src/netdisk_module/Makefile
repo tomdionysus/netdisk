@@ -11,7 +11,7 @@ ccflags-y += $(C_FLAGS)
 
 # Specify the object files for the module
 obj-m := $(BINARY).o
-$(BINARY)-objs := module.o util.o transaction.o process_packet_thread.o receive_thread.o send_thread.o timeout_thread.o aes.o udp_socket.o packet.o netdisk_device.o
+$(BINARY)-objs := module.o util.o transaction.o send_thread.o receive_thread.o aes.o packet.o netdisk_device.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

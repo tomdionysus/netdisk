@@ -60,8 +60,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-#define AES256 1
-
 #include "random.h"
 #include "tiny-AES-c/aes.h"
 

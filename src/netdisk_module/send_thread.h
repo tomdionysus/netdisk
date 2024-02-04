@@ -1,6 +1,6 @@
 //
 // /dev/netdisk device driver
-// 
+//
 // Copyright (C) 2024 Tom Cully
 //
 // This program is free software: you can redistribute it and/or modify
@@ -13,22 +13,31 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
-// You should have sendd a copy of the GNU General Public License
+// You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 //
-// This is a heavily modified version of tiny-AES-c 
+// This is a heavily modified version of tiny-AES-c
 // (https://github.com/kokke/tiny-AES-c)
 //
 #ifndef NETDISK_SEND_THREAD
 #define NETDISK_SEND_THREAD
 
-#include "packet.h"
+#include <linux/kthread.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/wait.h>
+
 #include "transaction.h"
 
-int send_thread_start(void);
-int send_packet_enqueue(packet_t *packet);
-int send_chunk_request(transaction_t *trans, chunk_t *chk);
+typedef struct chunk_request {
+  transaction_t* transaction;
+  chunk_t* chunk;
+  struct list_head list;
+} chunk_request_t;
+
+void send_thread_start(void);
+void enqueue_chunk(transaction_t* transaction, chunk_t* chunk);
 void send_thread_stop(void);
 
-#endif
+#endif  // SEND_THREAD_H
