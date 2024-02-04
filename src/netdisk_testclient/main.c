@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
         break;
       case NETDISK_SESSION_STATE_IV:
         // Wait for other side of IV
-        recvlen = recv_exact_with_timeout(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 5000);
+        recvlen = packet_recv(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 5000);
         if (recvlen == NETDISK_KEY_SIZE) {
           // Setup RX AES Context
           AES_init_ctx_iv(&session->rx_aes_context, config.key, session->buffer);
@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
         break;
       case NETDISK_SESSION_STATE_HANDSHAKE:
         // Wait for handshake packet
-        recvlen = recv_exact_with_timeout(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 5000);
+        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 5000);
         if (recvlen == sizeof(packet_handshake_t)) {
           // Decrypt
           AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
         break;
       case NETDISK_SESSION_STATE_READY:
         // Read a header, then a packet of that length
-        recvlen = recv_exact_with_timeout(session->socket_fd, session->buffer, sizeof(packet_header_t), 10000);
+        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 10000);
         if (recvlen == sizeof(packet_header_t)) {
           // Decrypt
           AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
           }
           // If there's more data, receive it
           if (header->length > 0) {
-            if (recv_exact_with_timeout(session->socket_fd, session->buffer + sizeof(packet_header_t), sizeof(packet_header_t), 10000) != header->length) {
+            if (packet_recv(session->socket_fd, session->buffer + sizeof(packet_header_t), sizeof(packet_header_t), 10000) != header->length) {
               log_warn("Timeout receiving packet data (%d bytes)", header->length);
               running = false;
               break;

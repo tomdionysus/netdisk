@@ -12,7 +12,7 @@
 #define NETDISK_BLOCK_SIZE 512
 #define NETDISK_BLOCK_SHIFT 9
 #define NETDISK_HEADER_SIZE 64
-#define NETDISK_MAX_PACKET_SIZE 1024 * 1024
+#define NETDISK_MAX_PACKET_SIZE 544
 #define NETDISK_KEY_SIZE 32
 
 #define NETDISK_VERSION_MAJOR 0x00
@@ -24,16 +24,16 @@
 #define NETDISK_SESSION_STATE_HANDSHAKE 2
 #define NETDISK_SESSION_STATE_READY 3
 
-#define NETDISK_COMMAND_START 0x0001
-#define NETDISK_COMMAND_STOP 0x0002
-#define NETDISK_COMMAND_READ 0x0003
-#define NETDISK_COMMAND_WRITE 0x0004
+#define NETDISK_COMMAND_INFO 0x0001
+#define NETDISK_COMMAND_READ 0x0002
+#define NETDISK_COMMAND_WRITE 0x0003
 
-#define NETDISK_REPLY_OK 0x8001
+#define NETDISK_REPLY_INFO 0x8001
 #define NETDISK_REPLY_READ_OK 0x8002
 #define NETDISK_REPLY_WRITE_OK 0x8003
 #define NETDISK_REPLY_READ_ONLY 0x8004
 #define NETDISK_REPLY_OUT_OF_RANGE 0x8005
+#define NETDISK_REPLY_UNKNOWN_COMMAND 0xFFFE
 #define NETDISK_REPLY_ERROR 0xFFFF
 
 #define NETDISK_PACKET_STATUS_OK 0
@@ -60,6 +60,8 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <time.h>
+
+#define AES256 1
 
 #include "random.h"
 #include "tiny-AES-c/aes.h"
@@ -108,7 +110,7 @@ int packet_create_server_socket(int* socket_fd, struct sockaddr_in* addr);
 int packet_create_client_socket(int* socket_fd, struct sockaddr_in* addr);
 int packet_destroy_socket(int socket_id);
 
-ssize_t recv_exact_with_timeout(int socket_fd, uint8_t* buffer, size_t size, int timeout_ms);
+ssize_t packet_recv(int socket_fd, uint8_t* buffer, size_t size, int timeout_ms);
 
 void packet_handshake_init(packet_handshake_t* packet);
 bool packet_magic_check(packet_handshake_t* packet);

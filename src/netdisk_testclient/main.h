@@ -22,6 +22,8 @@
 #include "main.h"
 #include "packet.h"
 #include "random.h"
+
+#define AES256 1
 #include "tiny-AES-c/aes.h"
 
 bool process_packet(session_t* session, packet_header_t* header, uint8_t* data);

@@ -27,6 +27,6 @@
 
 void signal_stop(int signum);
 void* handle_connection(void* arg);
-bool process_packet(session_t* session, packet_header_t* header, uint8_t* data);
+bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, char* address_port);
 
 #endif

@@ -1,6 +1,3 @@
-[submodule "deps/tiny-AES-c"]
-	path = deps/tiny-AES-c
-	url = https://github.com/kokke/tiny-AES-c.git
 [submodule "deps/red-black-tree"]
 	path = deps/red-black-tree
 	url = https://github.com/tomdionysus/red-black-tree.git
