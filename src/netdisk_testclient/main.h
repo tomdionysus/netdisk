@@ -22,8 +22,9 @@
 #include "main.h"
 #include "packet.h"
 #include "random.h"
+#include "tiny-AES-c/aes.h"
 
-void process_packet(packet_t* packet, struct sockaddr_in* addr);
+bool process_packet(session_t* session, packet_header_t* header, uint8_t* data);
 void signal_stop(int signum);
 
 #endif

@@ -18,7 +18,6 @@ file(GLOB netdisk_testclient_SOURCES ${CMAKE_SOURCE_DIR}/src/netdisk_testclient/
 # Dependencies
 find_package(Threads REQUIRED)
 include(${CMAKE_SOURCE_DIR}/deps/tiny-AES-c/CMakeLists.txt)
-include(${CMAKE_SOURCE_DIR}/deps/red-black-tree/CMakeLists.txt)
 
 # libnetdisk
 add_library(
@@ -53,15 +52,15 @@ add_custom_target(
 endif()
 
 # Test Client
-# add_executable(
-# 	netdisk_testclient
-# 	${netdisk_testclient_SOURCES}
-# )
+add_executable(
+	netdisk_testclient
+	${netdisk_testclient_SOURCES}
+)
 
-# target_link_libraries(
-# 	netdisk_testclient 
-# 	netdisk
-# )
+target_link_libraries(
+	netdisk_testclient 
+	netdisk
+)
 
 # Client Driver
 # project(netdisk_module C ASM)

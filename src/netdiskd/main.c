@@ -6,13 +6,15 @@
 //
 #include "main.h"
 
+netdiskd_config_t config;
+
 volatile bool running = true;
 volatile bool stopping = false;
-netdiskd_config_t config;
-int socket_fd;
-int disk_fd;
 
 int main(int argc, char* argv[]) {
+  int socket_fd;
+  int disk_fd;
+
   if (!parse_config(argc, argv, &config)) {
     exit(EXIT_FAILURE);
   }
@@ -32,7 +34,7 @@ int main(int argc, char* argv[]) {
 
   log_debug("Creating socket...");
 
-  switch (packet_create_socket(&socket_fd, &(config.addr))) {
+  switch (packet_create_server_socket(&socket_fd, &(config.addr))) {
     case NETDISK_PACKET_SOCKET_OK:
       break;
     case NETDISK_PACKET_SOCKET_CREATE_FAILED:
@@ -103,6 +105,7 @@ int main(int argc, char* argv[]) {
 
     // Handle SIGINT (close server)
     if (errno == EINTR) {
+      log_debug("EINTR received");
       running = false;
       continue;
     }
@@ -148,6 +151,8 @@ int main(int argc, char* argv[]) {
 }
 
 void* handle_connection(void* arg) {
+  volatile bool thread_running = true;
+
   session_t* session = (session_t*)arg;
   log_info("Connected %s:%d", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
 
@@ -158,35 +163,47 @@ void* handle_connection(void* arg) {
   packet_handshake_t* packet;
   packet_header_t* header;
 
-  while (running) {
+  while (thread_running) {
     switch (session->state) {
       case NETDISK_SESSION_STATE_INITIAL:
-        // Initial state. Send IV.
+        // Initial state.
         random_get(session->buffer, NETDISK_KEY_SIZE);
-        write(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
+        // Setup TX AES Context
+        AES_init_ctx_iv(&session->tx_aes_context, config.key, session->buffer);
+        // Send IV
+        send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 0);
+        // Set State
         session->state = NETDISK_SESSION_STATE_IV;
+        log_debug("Client is NETDISK_SESSION_STATE_IV");
         break;
       case NETDISK_SESSION_STATE_IV:
         // Wait for other side of IV
         recvlen = recv_exact_with_timeout(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 5000);
         if (recvlen == NETDISK_KEY_SIZE) {
-          // Setup AES Context
-          AES_init_ctx_iv(&session->aes_context, config.key, session->buffer);
+          // Setup RX AES Context
+          AES_init_ctx_iv(&session->rx_aes_context, config.key, session->buffer);
           // Init Handshake, Create NodeID
           packet = (packet_handshake_t*)session->buffer;
           packet_handshake_init(packet);
           random_get((uint8_t*)&packet->node_id, sizeof(packet->node_id));
           // Encrypt
-          AES_CBC_encrypt_buffer(&session->aes_context, session->buffer, sizeof(packet_handshake_t));
+          AES_CBC_encrypt_buffer(&session->tx_aes_context, session->buffer, sizeof(packet_handshake_t));
           // Send Handshake
-          write(session->socket_fd, &session->buffer, sizeof(packet_handshake_t));
+          ssize_t bytes_sent = send(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 0);
+          if (bytes_sent < sizeof(packet_handshake_t)) {
+            // Handle the error case
+            log_error("send failed, closing connection");
+            thread_running = false;
+          }
           // Set State
           session->state = NETDISK_SESSION_STATE_HANDSHAKE;
+          log_debug("Client is NETDISK_SESSION_STATE_HANDSHAKE");
         } else if (recvlen == -999) {
           log_warn("Timeout, closing connection");
-          running = false;
+          thread_running = false;
         } else {
-          running = false;
+          log_warn("Error, closing connection");
+          thread_running = false;
         }
         break;
       case NETDISK_SESSION_STATE_HANDSHAKE:
@@ -194,29 +211,30 @@ void* handle_connection(void* arg) {
         recvlen = recv_exact_with_timeout(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 5000);
         if (recvlen == sizeof(packet_handshake_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, recvlen);
+          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
           packet = (packet_handshake_t*)session->buffer;
           // Check Magic number
           if (!packet_magic_check(packet)) {
             log_warn("Bad magic number from %s:%d, disconnecting", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
-            running = false;
+            thread_running = false;
             break;
           }
           // Check Version
-          if (!packet_version_check(packet, config.strict_version)) {
+          if (!packet_version_check(packet, false)) {
             log_warn("Incompatible version from %s:%d, disconnecting", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
-            running = false;
+            thread_running = false;
             break;
           }
           // Get NodeID
           session->node_id = packet->node_id;
           // Set state ready
+          log_debug("Client is NETDISK_SESSION_STATE_READY");
           session->state = NETDISK_SESSION_STATE_READY;
         } else if (recvlen == -999) {
           log_warn("Timeout");
-          running = false;
+          thread_running = false;
         } else {
-          running = false;
+          thread_running = false;
         }
         break;
       case NETDISK_SESSION_STATE_READY:
@@ -224,40 +242,40 @@ void* handle_connection(void* arg) {
         recvlen = recv_exact_with_timeout(session->socket_fd, session->buffer, sizeof(packet_header_t), 10000);
         if (recvlen == sizeof(packet_header_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, recvlen);
+          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
           header = (packet_header_t*)session->buffer;
           // Check we have enough buffer
           if (header->length > NETDISK_MAX_PACKET_SIZE) {
             log_warn("Packet too large (%d bytes, limit %d)", header->length, NETDISK_MAX_PACKET_SIZE);
-            running = false;
+            thread_running = false;
             break;
           }
           // If there's more data, receive it
           if (header->length > 0) {
             if (recv_exact_with_timeout(session->socket_fd, session->buffer + sizeof(packet_header_t), sizeof(packet_header_t), 10000) != header->length) {
               log_warn("Tiemout receiving Packet data (%d bytes)", header->length);
-              running = false;
+              thread_running = false;
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->aes_context, session->buffer + sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer + sizeof(packet_header_t), header->length);
           }
           // Process the packet, stop if return true
           if (process_packet(session, header, session->buffer + sizeof(packet_header_t))) {
-            running = false;
+            thread_running = false;
             break;
           }
         } else if (recvlen == -999) {
           // Do Nothing
         } else {
-          running = false;
+          thread_running = false;
         }
         break;
     }
   }
 
   // Close socket
-  log_error("Shutdown, closing connection");
+  log_info("Closing Connection %s:%d", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
   close(session->socket_fd);
 
   // Free Session Buffer
@@ -270,43 +288,6 @@ void* handle_connection(void* arg) {
 }
 
 bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) { return false; }
-
-ssize_t recv_exact_with_timeout(int socket_fd, uint8_t* buffer, size_t size, int timeout_ms) {
-  ssize_t total_received = 0;
-  ssize_t received = 0;
-  struct timeval timeout;
-  fd_set readfds;
-
-  while (total_received < size) {
-    FD_ZERO(&readfds);
-    FD_SET(socket_fd, &readfds);
-
-    // Set timeout
-    timeout.tv_sec = timeout_ms / 1000;
-    timeout.tv_usec = (timeout_ms % 1000) * 1000;
-
-    int activity = select(socket_fd + 1, &readfds, NULL, NULL, &timeout);
-
-    if (activity < 0) {
-      return errno;
-    } else if (activity == 0) {
-      // Timeout
-      return -999;
-    } else {
-      // Data is available to be read
-      received = recv(socket_fd, buffer + total_received, size - total_received, 0);
-      if (received == -1) {
-        return -1;
-      } else if (received == 0) {
-        // Connection closed
-        break;
-      }
-      total_received += received;
-    }
-  }
-
-  return total_received;
-}
 
 void signal_stop(int signum) {
   if (!stopping) {
