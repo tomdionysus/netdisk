@@ -96,16 +96,16 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
   }
 
   if (rq_data_dir(trans->request) != READ) {
+    if (data != NULL) {
+      printk(KERN_ERR "netdisk: data supplied for completion of WRITE chunk (transaction %llu, chunk %llu)", trans_id, block_id);
+      return;
+    }
+  } else {
     if (data == NULL) {
-      printk(KERN_ERR "netdisk: no data supplied for completion of WRITE chunk (transaction %llu, chunk %llu)", trans_id, block_id);
+      printk(KERN_ERR "netdisk: no data supplied for completion of READ chunk (transaction %llu, chunk %llu)", trans_id, block_id);
       return;
     }
     memcpy(chunk->buffer, data, chunk->size);
-  } else {
-    if (data != NULL) {
-      printk(KERN_ERR "netdisk: data supplied for completion of READ chunk (transaction %llu, chunk %llu)", trans_id, block_id);
-      return;
-    }
   }
 
   printk(KERN_NOTICE "netdisk: chunk %llu complete (transaction %llu, block %d of %d)", block_id, trans_id, trans->completed_chunks, trans->total_chunks);
