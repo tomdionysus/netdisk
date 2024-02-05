@@ -302,6 +302,8 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
   reply->user_data = header->user_data;
   reply->length = 0;
 
+  ssize_t iolen;
+
   switch (header->operation) {
     case NETDISK_COMMAND_INFO:
       log_debug("(%s) NETDISK_COMMAND_INFO", address_port);
@@ -314,8 +316,8 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
         log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if (fread((uint8_t*)reply + sizeof(packet_header_t), 1, NETDISK_BLOCK_SIZE, disk_fd) != NETDISK_BLOCK_SIZE) {
-        log_error("(%s) NETDISK_COMMAND_READ File Error", address_port);
+      } else if ((iolen = fread((uint8_t*)reply + sizeof(packet_header_t), NETDISK_BLOCK_SIZE, 1, disk_fd)) != 1) {
+        log_error("(%s) NETDISK_COMMAND_READ File Error %d", address_port, iolen);
         reply->operation = NETDISK_REPLY_ERROR;
       } else {
         log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", address_port, header->block_id, NETDISK_BLOCK_SIZE);
@@ -332,8 +334,8 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
         log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if (fwrite(data, header->length, 1, disk_fd) != reply->length) {
-        log_error("(%s) NETDISK_COMMAND_WRITE File Error", address_port);
+      } else if ((iolen = fwrite(data, header->length, 1, disk_fd)) != 1) {
+        log_error("(%s) NETDISK_COMMAND_WRITE File Error %d", address_port, iolen);
         reply->operation = NETDISK_REPLY_ERROR;
       } else {
         log_debug("(%s) NETDISK_COMMAND_WRITE Complete, Block %d Length %d", address_port, header->block_id, header->length);

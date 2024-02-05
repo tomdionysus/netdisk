@@ -166,7 +166,7 @@ void send_chunk_request(struct socket *tcp_socket, struct AES_ctx *context, tran
   AES_CBC_encrypt_buffer(context, (uint8_t *)header, olen);
 
   // Send
-  if(packet_send(tcp_socket, (uint8_t *)header, olen) != olen) {
+  if (packet_send(tcp_socket, (uint8_t *)header, olen) != olen) {
     printk(KERN_ERR "netdisk: packet send failed (%u bytes)", olen);
   }
 

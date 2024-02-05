@@ -15,29 +15,33 @@ session_t *session = &session_raw;
 pthread_t send_thread_id = NULL;
 
 void* run_send_thread(void* arg) {
-    while (running) {
-      if((rand() % 2) ==0) {
+  while (running) {
+    packet_header_t *header = malloc(NETDISK_MAX_PACKET_SIZE);
 
-          packet_header_t *header = malloc(sizeof(packet_header_t));
-
-          header->operation = NETDISK_COMMAND_READ;
-          header->block_id = rand() % 128;
-          header->length = 0;
-
-          AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)header, sizeof(packet_header_t));
-
-          // Send Handshake
-          ssize_t bytes_sent = packet_send(session->socket_fd, (uint8_t*)header, sizeof(packet_header_t));
-          if (bytes_sent < sizeof(packet_handshake_t)) {
-              // Handle the error case
-              log_error("send failed");
-          }
-
-          free(header);
-      }
-      sleep(1); // Wait for 1 second
+    if((rand() % 2) != 0) {
+      header->operation = NETDISK_COMMAND_READ;
+      header->block_id = rand() % 128;
+      header->length = 0;
+    } else {
+      header->operation = NETDISK_COMMAND_WRITE;
+      header->block_id = rand() % 128;
+      header->length = NETDISK_BLOCK_SIZE;
     }
-    return NULL;
+
+    uint32_t olen = sizeof(packet_header_t) + header->length;
+        AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)header, olen);
+
+        // Send Command
+        ssize_t bytes_sent = packet_send(session->socket_fd, (uint8_t*)header,olen);
+        if (bytes_sent < sizeof(packet_handshake_t)) {
+            // Handle the error case
+            log_error("send failed");
+        }
+
+        free(header);
+    sleep(1); // Wait for 1 second
+  }
+  return NULL;
 }
 
 int main(int argc, char* argv[]) {

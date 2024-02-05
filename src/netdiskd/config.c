@@ -105,6 +105,7 @@ void dump_config(netdiskd_config_t *config) {
   log_debug("config: key = %s", hexbuffer);
   log_debug("config: max_blocks = %d", config->max_blocks);
   log_debug("config: strict_version = %s", config->strict_version ? "true" : "false");
+  log_debug("config: read_only = %s", config->read_only ? "true" : "false");
 }
 
 void parse_key(const char *hex_str, uint8_t *key) {
