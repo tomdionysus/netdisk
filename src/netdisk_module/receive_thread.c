@@ -32,12 +32,9 @@ static struct task_struct *receive_thread = NULL;
 session_t *session;
 
 static int run_receive_thread(void *data) {
+  // Setup session
   session = kmalloc(sizeof(session_t), GFP_KERNEL);
-
-  printk(KERN_NOTICE "netdisk: receive_thread startup\n");
-
   session->socket_fd = client_socket;
-
   session->state = NETDISK_SESSION_STATE_INITIAL;
   session->buffer = kmalloc(NETDISK_MAX_PACKET_SIZE, GFP_KERNEL);
 
@@ -156,13 +153,14 @@ static int run_receive_thread(void *data) {
     }
   }
 
+  // If any transactions are left, they should fail
   error_all_transactions();
   release_all_transactions();
 
+  // Free the session
   kfree(session->buffer);
   kfree(session);
 
-  printk(KERN_NOTICE "netdisk: receive_thread shutdown\n");
   receive_thread = NULL;
 
   return 0;
@@ -175,22 +173,18 @@ int receive_thread_start(void) {
     return 0;
   }
 
-  printk(KERN_NOTICE "Starting receive thread\n");
-
   receive_thread = kthread_run(run_receive_thread, NULL, "run_receive_thread");
   if (IS_ERR(receive_thread)) {
     printk(KERN_INFO "netdisk: failed to create run_receive_thread\n");
     return PTR_ERR(receive_thread);
   }
 
-  printk(KERN_NOTICE "Started receive thread\n");
-
   return 0;
 }
 
 bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) {
-  printk(KERN_NOTICE "netdisk: Incoming packet %s, Transaction %llu, Block %llu, Length %u\n", packet_reply_to_str(header->operation), header->transaction_id,
-         header->block_id, header->length);
+  // printk(KERN_NOTICE "netdisk: Incoming packet %s, Transaction %llu, Block %llu, Length %u\n", packet_reply_to_str(header->operation), header->transaction_id,
+  //        header->block_id, header->length);
 
   switch (header->operation) {
     case NETDISK_REPLY_OK:
@@ -210,12 +204,9 @@ bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) 
 
 void receive_thread_stop(void) {
   if (!receive_thread) {
-    printk(KERN_ALERT "netdisk: receive_thread_stop called but thread not started\n");
     return;
   }
 
-  printk(KERN_NOTICE "netdisk: Stopping receive thread\n");
   kthread_stop(receive_thread);
   receive_thread = NULL;
-  printk(KERN_NOTICE "netdisk: Stopped receive thread\n");
 }

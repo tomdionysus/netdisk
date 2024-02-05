@@ -108,7 +108,7 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
     memcpy(chunk->buffer, data, chunk->size);
   }
 
-  printk(KERN_NOTICE "netdisk: chunk %llu complete (transaction %llu, block %d of %d)", block_id, trans_id, trans->completed_chunks, trans->total_chunks);
+  // printk(KERN_NOTICE "netdisk: chunk %llu complete (transaction %llu, block %d of %d)", block_id, trans_id, trans->completed_chunks, trans->total_chunks);
 
   // Release the chunk
   release_chunk(trans, block_id);
@@ -118,7 +118,7 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
 
   // If all the chunks are complete
   if (trans->completed_chunks == trans->total_chunks) {
-    printk(KERN_NOTICE "netdisk: transaction %llu complete", trans_id);
+    // printk(KERN_NOTICE "netdisk: transaction %llu complete", trans_id);
 
     // End the request
     blk_mq_end_request(trans->request, BLK_STS_OK);

@@ -244,7 +244,7 @@ void* handle_connection(void* arg) {
         break;
       case NETDISK_SESSION_STATE_READY:
         // Read a header, then a packet of that length
-        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 10000);
+        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 1000);
         if (recvlen > 0) {
           // Decrypt
           AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, sizeof(packet_header_t));
@@ -257,7 +257,7 @@ void* handle_connection(void* arg) {
           }
           // If there's more data, receive it
           if (header->length > 0) {
-            if (packet_recv(session->socket_fd, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
+            if (packet_recv(session->socket_fd, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length, 1000) != header->length) {
               log_warn("(%s) Timeout Packet data (%d bytes)", address_port, header->length);
               thread_running = false;
               break;
@@ -334,7 +334,7 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
         log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if ((iolen = fwrite(data, header->length, 1, disk_fd)) != 1) {
+      } else if ((iolen = fwrite(data, 1, header->length, disk_fd)) != header->length) {
         log_error("(%s) NETDISK_COMMAND_WRITE File Error %d", address_port, iolen);
         reply->operation = NETDISK_REPLY_ERROR;
       } else {
