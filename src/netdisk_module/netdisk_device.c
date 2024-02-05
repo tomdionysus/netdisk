@@ -30,7 +30,7 @@ static void netdisk_release(struct gendisk *disk) {
 
 static int netdisk_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd, unsigned long arg) {
   if (cmd == HDIO_GETGEO) {
-    printk(KERN_DEBUG "netdisk: netdisk_ioctl::HDIO_GETGEO");
+    printk(KERN_NOTICE "netdisk: netdisk_ioctl::HDIO_GETGEO");
 
     struct hd_geometry geo;
     geo.heads = 4;
@@ -85,28 +85,30 @@ static int netdisk_process_request(struct request *rq) {
 void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t len) {
   transaction_t *trans;
   if ((trans = find_transaction(trans_id)) == NULL) {
-    printk(KERN_ALERT "netdisk: transaction %llu not found", trans_id);
+    printk(KERN_ERR "netdisk: transaction %llu not found", trans_id);
     return;
   }
 
   chunk_t *chunk;
   if ((chunk = find_chunk(trans, block_id)) == NULL) {
-    printk(KERN_ALERT "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
+    printk(KERN_ERR "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
     return;
   }
 
   if (rq_data_dir(trans->request) != READ) {
     if (data == NULL) {
-      printk(KERN_ALERT "netdisk: no data supplied for completion of WRITE chunk (transaction %llu, chunk %llu)", trans_id, block_id);
+      printk(KERN_ERR "netdisk: no data supplied for completion of WRITE chunk (transaction %llu, chunk %llu)", trans_id, block_id);
       return;
     }
     memcpy(chunk->buffer, data, chunk->size);
   } else {
     if (data != NULL) {
-      printk(KERN_ALERT "netdisk: data supplied for completion of READ chunk (transaction %llu, chunk %llu)", trans_id, block_id);
+      printk(KERN_ERR "netdisk: data supplied for completion of READ chunk (transaction %llu, chunk %llu)", trans_id, block_id);
       return;
     }
   }
+
+  printk(KERN_NOTICE "netdisk: chunk %llu complete (transaction %llu, block %d of %d)", block_id, trans_id, trans->completed_chunks, trans->total_chunks);
 
   // Release the chunk
   release_chunk(trans, block_id);
@@ -116,6 +118,8 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
 
   // If all the chunks are complete
   if (trans->completed_chunks == trans->total_chunks) {
+    printk(KERN_NOTICE "netdisk: transaction %llu complete", trans_id);
+
     // End the request
     blk_mq_end_request(trans->request, BLK_STS_OK);
 
@@ -127,18 +131,20 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
 void netdisk_error_chunk(u64 trans_id, u64 block_id, u8 error) {
   transaction_t *trans;
   if ((trans = find_transaction(trans_id)) == NULL) {
-    printk(KERN_ALERT "netdisk: transaction %llu not found", trans_id);
+    printk(KERN_ERR "netdisk: transaction %llu not found", trans_id);
     return;
   }
 
   chunk_t *chunk;
   if ((chunk = find_chunk(trans, block_id)) == NULL) {
-    printk(KERN_ALERT "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
+    printk(KERN_ERR "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
     return;
   }
 
   // Release the chunk
   release_chunk(trans, block_id);
+
+  printk(KERN_ERR "netdisk: chunk %llu error (transaction %llu)", block_id, trans_id);
 
   // End the request with error
   blk_update_request(trans->request, BLK_STS_IOERR, trans->completed_bytes);
@@ -146,6 +152,8 @@ void netdisk_error_chunk(u64 trans_id, u64 block_id, u8 error) {
 
   // Release the transaction
   release_transaction(trans_id);
+
+  printk(KERN_ERR "netdisk: transaction %llu error", trans_id);
 }
 
 // queue callback function

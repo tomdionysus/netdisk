@@ -34,7 +34,7 @@ session_t *session;
 static int run_receive_thread(void *data) {
   session = kmalloc(sizeof(session_t), GFP_KERNEL);
 
-  printk(KERN_DEBUG "netdisk: receive_thread startup\n");
+  printk(KERN_NOTICE "netdisk: receive_thread startup\n");
 
   session->socket_fd = client_socket;
 
@@ -134,22 +134,21 @@ static int run_receive_thread(void *data) {
           }
           // If there's more data, receive it
           if (header->length > 0) {
-            if (packet_recv(session->socket_fd, session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
+            if (packet_recv(session->socket_fd, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
               printk(KERN_ALERT "netdisk: Timeout receiving packet data (%d bytes)", header->length);
               running = false;
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer + sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
           }
           // Process the packet, stop if return true
-          if (process_packet(session, header, header->length == 0 ? NULL : session->buffer + sizeof(packet_header_t))) {
+          if (process_packet(session, header, header->length == 0 ? NULL : (uint8_t*)session->buffer + sizeof(packet_header_t))) {
             running = false;
             break;
           }
         } else if (recvlen == -999) {
           // Do Nothing
-          printk(KERN_DEBUG "netdisk: loop timeout (normal)");
         } else {
           running = false;
         }
@@ -163,7 +162,7 @@ static int run_receive_thread(void *data) {
   kfree(session->buffer);
   kfree(session);
 
-  printk(KERN_DEBUG "netdisk: receive_thread shutdown\n");
+  printk(KERN_NOTICE "netdisk: receive_thread shutdown\n");
   receive_thread = NULL;
 
   return 0;
@@ -176,7 +175,7 @@ int receive_thread_start(void) {
     return 0;
   }
 
-  printk(KERN_DEBUG "Starting receive thread\n");
+  printk(KERN_NOTICE "Starting receive thread\n");
 
   receive_thread = kthread_run(run_receive_thread, NULL, "run_receive_thread");
   if (IS_ERR(receive_thread)) {
@@ -184,12 +183,15 @@ int receive_thread_start(void) {
     return PTR_ERR(receive_thread);
   }
 
-  printk(KERN_DEBUG "Started receive thread\n");
+  printk(KERN_NOTICE "Started receive thread\n");
 
   return 0;
 }
 
 bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) {
+
+  printk(KERN_NOTICE "netdisk: Incoming packet %s, Transaction %llu, Block %llu, Length %u\n", packet_reply_to_str(header->operation), header->transaction_id, header->block_id, header->length);
+
   switch (header->operation) {
     case NETDISK_REPLY_OK:
       netdisk_complete_chunk(header->transaction_id, header->block_id, data, header->length);
@@ -200,7 +202,7 @@ bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) 
       netdisk_error_chunk(header->transaction_id, header->block_id, header->operation);
       break;
     default:
-      printk(KERN_DEBUG "netdisk: Received unknown operation %d\n", header->operation);
+      printk(KERN_NOTICE "netdisk: Received unknown operation %d\n", header->operation);
   }
 
   return false;
@@ -212,8 +214,8 @@ void receive_thread_stop(void) {
     return;
   }
 
-  printk(KERN_DEBUG "netdisk: Stopping receive thread\n");
+  printk(KERN_NOTICE "netdisk: Stopping receive thread\n");
   kthread_stop(receive_thread);
   receive_thread = NULL;
-  printk(KERN_DEBUG "netdisk: Stopped receive thread\n");
+  printk(KERN_NOTICE "netdisk: Stopped receive thread\n");
 }

@@ -103,7 +103,7 @@ static int __init netdisk_driver_init(void) {
   create_netdisk_device(config.devicename, client_socket);
 
   // Loaded Banner
-  printk(KERN_DEBUG "netdisk: Module loaded. Server: %pI4 Port: %hu, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port),
+  printk(KERN_NOTICE "netdisk: Module loaded. Server: %pI4 Port: %hu, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port),
          config.devicename);
 
   return 0;

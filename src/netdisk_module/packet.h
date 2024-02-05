@@ -111,7 +111,7 @@ typedef struct packet_header {
   uint16_t flags;           // (Unused, Reserved) Flags for the packet
   uint32_t length;          // The length of the data following this packet
   uint64_t block_id;        // The block_id (or block offset) to be read or written
-  uint64_t transaction_id;  // The transaction ID for this read or write
+  uint64_t transaction_id;  // (Unused) The transaction ID for this read or write
   uint64_t user_data;       // (Unused) Any user data to be included in the reply.
 } packet_header_t;
 

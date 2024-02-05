@@ -83,14 +83,14 @@ void send_thread_start(void) {
   }
 }
 
-void enqueue_chunk(transaction_t *transaction, chunk_t *chunk) {
+void enqueue_chunk(transaction_t *trans, chunk_t *chunk) {
   chunk_request_t *req = kmalloc(sizeof(*req), GFP_KERNEL);
   if (!req) {
     printk(KERN_ERR "netdisk: Failed to allocate chunk request\n");
     return;
   }
 
-  req->transaction = transaction;
+  req->transaction = trans;
   req->chunk = chunk;
   mutex_lock(&queue_mutex);
   list_add_tail(&req->list, &chunk_queue);
@@ -104,7 +104,7 @@ void send_thread_stop(void) {
     return;
   }
 
-  printk(KERN_DEBUG "netdisk: Stopping send thread\n");
+  printk(KERN_NOTICE "netdisk: Stopping send thread\n");
 
   // Set the flag to false to stop the thread and wake it up
   thread_running = false;
@@ -113,5 +113,5 @@ void send_thread_stop(void) {
   // Wait for the thread to finish
   kthread_stop(send_thread);
   send_thread = NULL;
-  printk(KERN_DEBUG "netdisk: Stopped send thread\n");
+  printk(KERN_NOTICE "netdisk: Stopped send thread\n");
 }

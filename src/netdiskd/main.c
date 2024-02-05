@@ -247,7 +247,7 @@ void* handle_connection(void* arg) {
         recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 10000);
         if (recvlen == sizeof(packet_header_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
+          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, sizeof(packet_header_t));
           header = (packet_header_t*)session->buffer;
           // Check we have enough buffer
           if (header->length > NETDISK_MAX_PACKET_SIZE) {
@@ -257,16 +257,16 @@ void* handle_connection(void* arg) {
           }
           // If there's more data, receive it
           if (header->length > 0) {
-            if (packet_recv(session->socket_fd, session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
+            if (packet_recv(session->socket_fd, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
               log_warn("(%s) Timeout Packet data (%d bytes)", address_port, header->length);
               thread_running = false;
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer + sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
           }
           // Process the packet, stop if return true
-          if (process_packet(session, header, session->buffer + sizeof(packet_header_t), address_port)) {
+          if (process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t), address_port)) {
             thread_running = false;
             break;
           }
@@ -314,7 +314,7 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
         log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if (fread(reply + sizeof(packet_header_t), 1, NETDISK_BLOCK_SIZE, disk_fd) != NETDISK_BLOCK_SIZE) {
+      } else if (fread((uint8_t*)reply + sizeof(packet_header_t), 1, NETDISK_BLOCK_SIZE, disk_fd) != NETDISK_BLOCK_SIZE) {
         log_error("(%s) NETDISK_COMMAND_READ File Error", address_port);
         reply->operation = NETDISK_REPLY_ERROR;
       } else {
