@@ -83,6 +83,25 @@ bool packet_version_check(packet_handshake_t *packet, bool strict) {
          (!strict || packet->version.patch == NETDISK_VERSION_PATCH);
 }
 
+ssize_t packet_send(int socket_fd, const uint8_t *buffer, size_t size) {
+  ssize_t total_sent = 0;
+  ssize_t sent = 0;
+
+  while (total_sent < size) {
+    sent = send(socket_fd, buffer + total_sent, size - total_sent, 0);
+
+    if (sent <= 0) {
+      // Error or connection closed by peer
+      log_error("TCP: Error %d", sent);
+      return -1;
+    }
+
+    total_sent += sent;
+  }
+
+  return total_sent;
+}
+
 ssize_t packet_recv(int socket_fd, uint8_t *buffer, size_t size, int timeout_ms) {
   ssize_t total_received = 0;
   ssize_t received = 0;

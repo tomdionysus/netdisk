@@ -134,16 +134,16 @@ static int run_receive_thread(void *data) {
           }
           // If there's more data, receive it
           if (header->length > 0) {
-            if (packet_recv(session->socket_fd, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
+            if (packet_recv(session->socket_fd, (uint8_t *)session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
               printk(KERN_ALERT "netdisk: Timeout receiving packet data (%d bytes)", header->length);
               running = false;
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t *)session->buffer + sizeof(packet_header_t), header->length);
           }
           // Process the packet, stop if return true
-          if (process_packet(session, header, header->length == 0 ? NULL : (uint8_t*)session->buffer + sizeof(packet_header_t))) {
+          if (process_packet(session, header, header->length == 0 ? NULL : (uint8_t *)session->buffer + sizeof(packet_header_t))) {
             running = false;
             break;
           }
@@ -189,8 +189,8 @@ int receive_thread_start(void) {
 }
 
 bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) {
-
-  printk(KERN_NOTICE "netdisk: Incoming packet %s, Transaction %llu, Block %llu, Length %u\n", packet_reply_to_str(header->operation), header->transaction_id, header->block_id, header->length);
+  printk(KERN_NOTICE "netdisk: Incoming packet %s, Transaction %llu, Block %llu, Length %u\n", packet_reply_to_str(header->operation), header->transaction_id,
+         header->block_id, header->length);
 
   switch (header->operation) {
     case NETDISK_REPLY_OK:

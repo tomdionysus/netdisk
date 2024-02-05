@@ -16,6 +16,8 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <unistd.h>
+#include <pthread.h>
 
 #include "config.h"
 #include "logger.h"

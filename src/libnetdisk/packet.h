@@ -12,7 +12,7 @@
 #define NETDISK_BLOCK_SIZE 512
 #define NETDISK_BLOCK_SHIFT 9
 #define NETDISK_HEADER_SIZE 64
-#define NETDISK_MAX_PACKET_SIZE 544
+#define NETDISK_MAX_PACKET_SIZE 1024
 #define NETDISK_KEY_SIZE 32
 
 #define NETDISK_VERSION_MAJOR 0x00
@@ -107,6 +107,7 @@ int packet_create_server_socket(int* socket_fd, struct sockaddr_in* addr);
 int packet_create_client_socket(int* socket_fd, struct sockaddr_in* addr);
 int packet_destroy_socket(int socket_id);
 
+ssize_t packet_send(int socket_fd, const uint8_t* buffer, size_t size);
 ssize_t packet_recv(int socket_fd, uint8_t* buffer, size_t size, int timeout_ms);
 
 void packet_handshake_init(packet_handshake_t* packet);

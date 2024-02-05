@@ -13,7 +13,7 @@ volatile bool stopping = false;
 FILE* disk_fd;
 
 int main(int argc, char* argv[]) {
-  int socket_fd;
+  int server_socket_fd;
 
   if (!parse_config(argc, argv, &config)) {
     exit(EXIT_FAILURE);
@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
 
   log_debug("Creating socket...");
 
-  switch (packet_create_server_socket(&socket_fd, &(config.addr))) {
+  switch (packet_create_server_socket(&server_socket_fd, &(config.addr))) {
     case NETDISK_PACKET_SOCKET_OK:
       break;
     case NETDISK_PACKET_SOCKET_CREATE_FAILED:
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
   log_debug("Initialise RNG...");
   if (!random_init()) {
     log_error("Failed to initialise cryptographic random source");
-    close(socket_fd);
+    close(server_socket_fd);
     exit(EXIT_FAILURE);
   }
 
@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
   log_debug("Open file or device...");
   if ((disk_fd = fopen(config.file, config.read_only ? "r" : "a+")) == NULL) {
     log_error("Failed to open file/device %s", config.file);
-    close(socket_fd);
+    close(server_socket_fd);
     random_shutdown();
     exit(EXIT_FAILURE);
   }
@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
 
   if (sigaction(SIGINT, &sa, NULL) == -1) {
     log_error("sigaction failed");
-    close(socket_fd);
+    close(server_socket_fd);
     random_shutdown();
     exit(EXIT_FAILURE);
   }
@@ -97,8 +97,8 @@ int main(int argc, char* argv[]) {
     FD_ZERO(&readfds);
 
     // Add the server socket to the set
-    FD_SET(socket_fd, &readfds);
-    max_sd = socket_fd;
+    FD_SET(server_socket_fd, &readfds);
+    max_sd = server_socket_fd;
 
     // Wait for an activity on one of the sockets, timeout is NULL, so wait indefinitely
     int activity = select(max_sd + 1, &readfds, NULL, NULL, NULL);
@@ -117,8 +117,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Check if it was for the server socket, meaning an incoming connection
-    if (FD_ISSET(socket_fd, &readfds)) {
-      if ((new_session->socket_fd = accept(socket_fd, (struct sockaddr*)&(new_session->remote_addr), (socklen_t*)&addrlen)) < 0) {
+    if (FD_ISSET(server_socket_fd, &readfds)) {
+      if ((new_session->socket_fd = accept(server_socket_fd, (struct sockaddr*)&(new_session->remote_addr), (socklen_t*)&addrlen)) < 0) {
         log_error("Accept Error");
       }
 
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
 
   // Close the socket
   log_debug("Close socket...");
-  packet_destroy_socket(socket_fd);
+  packet_destroy_socket(server_socket_fd);
 
   // Close the file/device
   log_debug("Close file...");
@@ -167,7 +167,7 @@ void* handle_connection(void* arg) {
 
   log_info("(%s) Connected", address_port);
 
-  while (thread_running) {
+  while (running && thread_running) {
     switch (session->state) {
       case NETDISK_SESSION_STATE_INITIAL:
         // Initial state.
@@ -175,7 +175,7 @@ void* handle_connection(void* arg) {
         // Setup TX AES Context
         AES_init_ctx_iv(&session->tx_aes_context, config.key, session->buffer);
         // Send IV
-        send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 0);
+        packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
         // Set State
         session->state = NETDISK_SESSION_STATE_IV;
         log_debug("(%s) NETDISK_SESSION_STATE_IV", address_port);
@@ -193,7 +193,7 @@ void* handle_connection(void* arg) {
           // Encrypt
           AES_CBC_encrypt_buffer(&session->tx_aes_context, session->buffer, sizeof(packet_handshake_t));
           // Send Handshake
-          ssize_t bytes_sent = send(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 0);
+          ssize_t bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
             // Handle the error case
             log_error("(%s) Send failed", address_port);
@@ -245,7 +245,7 @@ void* handle_connection(void* arg) {
       case NETDISK_SESSION_STATE_READY:
         // Read a header, then a packet of that length
         recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 10000);
-        if (recvlen == sizeof(packet_header_t)) {
+        if (recvlen > 0) {
           // Decrypt
           AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, sizeof(packet_header_t));
           header = (packet_header_t*)session->buffer;
@@ -265,14 +265,14 @@ void* handle_connection(void* arg) {
             // And Decrypt it
             AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
           }
-          // Process the packet, stop if return true
-          if (process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t), address_port)) {
-            thread_running = false;
-            break;
-          }
+
+          // Process the packet
+          process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t), address_port);
+
         } else if (recvlen == -999) {
           // Do Nothing
         } else {
+          log_warn("(%s) Unknown Error", address_port);
           thread_running = false;
         }
         break;
@@ -280,8 +280,8 @@ void* handle_connection(void* arg) {
   }
 
   // Close socket
-  log_info("(%s) Closing", address_port);
   close(session->socket_fd);
+  log_info("(%s) Disconnected", address_port);
 
   // Free Session Buffer
   free(session->buffer);
@@ -294,7 +294,7 @@ void* handle_connection(void* arg) {
 
 bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, char* address_port) {
   // Alloc Buffer
-  packet_header_t* reply = malloc(NETDISK_MAX_PACKET_SIZE);
+  packet_header_t* reply = (packet_header_t*)malloc(NETDISK_MAX_PACKET_SIZE);
 
   // Copy user info
   reply->block_id = header->block_id;
@@ -332,7 +332,7 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
         log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if (fwrite(data, reply->length, 1, disk_fd) != reply->length) {
+      } else if (fwrite(data, header->length, 1, disk_fd) != reply->length) {
         log_error("(%s) NETDISK_COMMAND_WRITE File Error", address_port);
         reply->operation = NETDISK_REPLY_ERROR;
       } else {
@@ -346,9 +346,14 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
   }
 
   // Encrypt
-  AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)reply, sizeof(packet_header_t) + reply->length);
+  uint32_t olen = sizeof(packet_header_t) + reply->length;
+  AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)reply, olen);
+
   // Send
-  send(session->socket_fd, session->buffer, sizeof(packet_header_t) + reply->length, 0);
+  ssize_t sendlen = packet_send(session->socket_fd, (uint8_t*)reply, olen);
+  if (sendlen != olen) {
+    log_warn("(%s) Sending Failed %d", address_port, sendlen);
+  };
 
   // Free Buffer
   free(reply);
