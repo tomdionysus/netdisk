@@ -25,6 +25,8 @@ add_library(
 	${libnetdisk_SOURCES}
 )
 
+install(TARGETS netdisk LIBRARY DESTINATION lib)
+
 target_link_libraries(
 	netdisk 
 	tiny-aes
@@ -42,13 +44,24 @@ target_link_libraries(
 	Threads::Threads
 )
 
+install(TARGETS netdiskd DESTINATION bin)
+
 # Linux Module
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 add_custom_target(
     netdisk_module ALL
     COMMAND make
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/netdisk_module
 )
+
+install(CODE "
+    execute_process(
+        COMMAND make install
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/netdisk_module
+    )
+")
+
 endif()
 
 # Test Client
@@ -62,18 +75,6 @@ target_link_libraries(
 	netdisk
 )
 
-# Client Driver
-# project(netdisk_module C ASM)
-
-# add_executable(
-# 	netdiskd
-# 	${netdisk_mod_SOURCES}
-# )
-# target_link_libraries(netdiskd 
-# 	netdisk
-# )
-
-
 # # Testing
 # FetchContent_Declare(
 #   googletest
@@ -85,16 +86,3 @@ target_link_libraries(
 # enable_testing()
 
 # file(GLOB TEST_SOURCES test/*.cpp)
-
-# add_executable(
-#   kapua_test
-# 	${TEST_SOURCES}
-# )
-# target_link_libraries(
-#   kapua_test
-#   kapua
-#   GTest::gtest_main
-#   GTest::gmock_main
-# )
-# include(GoogleTest)
-# gtest_discover_tests(kapua_test)
