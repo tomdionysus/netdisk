@@ -2,7 +2,12 @@
 
 A SAN-like remote block device server/client for Linux in C/C++. netdisk has two components:
 
-Status: **v0.0.1 ALPHA**
+## Status
+
+**v0.0.1 ALPHA** 
+* Working not performance optimised
+
+## Overview
 
 * A server (netdiskd) that listens on a configurable TCP Port (26547 by default) for connections from the netdisk driver module, and reads or writes blocks on a specified device or file according to commands over that connection.
 * A client (netdisk) block device driver kernel module that connects to a netdiskd server, exposing its configured (remote) device or file as a local device.
@@ -48,6 +53,45 @@ The client is a linux kernel module, that can be loaded using `modprobe`. You mu
 
 ```sh
 modprobe netdisk key=6f334a6b4aa5a7ac8462387a3cdb8f5755b3c1ef0947cb1492c86793265166c0 address=192.168.1.40
+```
+
+You can see the block device using `lsblk`:
+
+```sh
+NAME    MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda       8:0    0    8G  0 disk 
+├─sda1    8:1    0  300M  0 part /boot
+├─sda2    8:2    0    2G  0 part [SWAP]
+└─sda3    8:3    0  5.7G  0 part /
+sr0      11:0    1 1024M  0 rom  
+netdisk 253:0    0  100M  0 disk /netdisk
+```
+
+You can format the drive to ext4 using `mkfs`:
+
+```sh
+mkfs.ext4 -L NetdiskDrive /dev/netdisk
+```
+
+And mount it using `mount`
+
+```sh
+mkdir /netdisk
+mount /dev/netdisk /netdisk
+```
+
+## Troubleshooting
+
+`netdiskd` can take a log level parameter to give more info:
+
+```sh
+netdiskd --log_level=DEBUG --key=6f334a6b4aa5a7ac8462387a3cdb8f5755b3c1ef0947cb1492c86793265166c0 --file=./disk.netdisk
+```
+
+The `netdisk` kernel module logs can be seen using `dmesg`:
+
+```
+[ 1766.028397] netdisk: loaded. Server: 192.168.1.40 Port: 26547, Device Name: netdisk
 ```
 
 ## Uses

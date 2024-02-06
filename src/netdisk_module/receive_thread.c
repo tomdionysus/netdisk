@@ -163,9 +163,6 @@ static int run_receive_thread(void *data) {
 
   receive_thread = NULL;
 
-  // Unload the module
-  module_put(THIS_MODULE);
-
   return 0;
 }
 
