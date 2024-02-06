@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 
   // Open the file/device
   log_debug("Open file or device...");
-  if ((disk_fd = fopen(config.file, config.read_only ? "r" : "a+")) == NULL) {
+  if ((disk_fd = fopen(config.file, config.read_only ? "r" : "r+")) == NULL) {
     log_error("Failed to open file/device %s", config.file);
     close(server_socket_fd);
     random_shutdown();
@@ -313,16 +313,19 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       if (config.max_blocks != 0 && header->block_id > config.max_blocks) {
         log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
-        log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
+      } else if ((iolen = fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET)) != 0) {
+        log_error("(%s) NETDISK_COMMAND_READ Seek Error %d (pos %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if ((iolen = fread((uint8_t*)reply + sizeof(packet_header_t), NETDISK_BLOCK_SIZE, 1, disk_fd)) != 1) {
-        log_error("(%s) NETDISK_COMMAND_READ File Error %d", address_port, iolen);
-        reply->operation = NETDISK_REPLY_ERROR;
       } else {
-        log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", address_port, header->block_id, NETDISK_BLOCK_SIZE);
-        reply->operation = NETDISK_REPLY_OK;
-        reply->length = NETDISK_BLOCK_SIZE;
+        iolen = fread((uint8_t*)reply + sizeof(packet_header_t), header->block_length, 1, disk_fd);
+        if (ferror(disk_fd)) {
+          log_error("(%s) NETDISK_COMMAND_READ File Error %s (pos %lu, length %lu)", address_port, iolen, iolen, header->block_id << NETDISK_BLOCK_SHIFT, header->block_length);
+          reply->operation = NETDISK_REPLY_ERROR;
+        } else {
+          log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", address_port, header->block_id, header->block_length);
+          reply->operation = NETDISK_REPLY_OK;
+          reply->length = header->block_length;
+        }
       }
       break;
     case NETDISK_COMMAND_WRITE:
@@ -332,14 +335,17 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
         log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
       } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
-        log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
+        log_error("(%s) NETDISK_COMMAND_WRITE Seek Error %d (pos %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
-      } else if ((iolen = fwrite(data, 1, header->length, disk_fd)) != header->length) {
-        log_error("(%s) NETDISK_COMMAND_WRITE File Error %d", address_port, iolen);
-        reply->operation = NETDISK_REPLY_ERROR;
       } else {
-        log_debug("(%s) NETDISK_COMMAND_WRITE Complete, Block %d Length %d", address_port, header->block_id, header->length);
-        reply->operation = NETDISK_REPLY_OK;
+        iolen = fwrite(data, header->block_length, 1, disk_fd);
+        if (ferror(disk_fd)) {
+          log_error("(%s) NETDISK_COMMAND_WRITE File Error %d (pos %lu, length %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT, header->block_length);
+          reply->operation = NETDISK_REPLY_ERROR;
+        } else {
+          log_debug("(%s) NETDISK_COMMAND_WRITE Complete, Block %d Length %d", address_port, header->block_id, header->block_length);
+          reply->operation = NETDISK_REPLY_OK;
+        }
       }
       break;
     default:

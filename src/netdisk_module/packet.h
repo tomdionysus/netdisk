@@ -38,7 +38,7 @@
 #define NETDISK_BLOCK_SIZE 512
 #define NETDISK_BLOCK_SHIFT 9
 #define NETDISK_HEADER_SIZE 64
-#define NETDISK_MAX_PACKET_SIZE 544
+#define NETDISK_MAX_PACKET_SIZE ((1024*1024)+32)
 #define NETDISK_KEY_SIZE 32
 
 #define NETDISK_VERSION_MAJOR 0x00
@@ -109,10 +109,11 @@ typedef struct packet_handshake {
 typedef struct packet_header {
   uint16_t operation;       // The operation (commands, replies, errors etc)
   uint16_t flags;           // (Unused, Reserved) Flags for the packet
-  uint32_t length;          // The length of the data following this packet
   uint64_t block_id;        // The block_id (or block offset) to be read or written
+  uint32_t block_length;    // The length of the block to be read or written
   uint64_t transaction_id;  // (Unused) The transaction ID for this read or write
-  uint64_t user_data;       // (Unused) Any user data to be included in the reply.
+  uint32_t user_data;       // (Unused) Any user data to be included in the reply.
+  uint32_t length;          // The length of the data following this packet
 } packet_header_t;
 
 #pragma pack(pop)

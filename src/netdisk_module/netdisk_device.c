@@ -47,39 +47,37 @@ static int netdisk_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd, 
   return -ENOTTY;
 }
 
-// Serve requests
 static int netdisk_process_request(struct request *rq) {
-  struct bio_vec bvec;
-  struct req_iterator iter;
-  loff_t pos = blk_rq_pos(rq) << SECTOR_SHIFT;
-  u64 transaction_id = get_random_u64();
-  transaction_t *trans = create_transaction(transaction_id, rq);
-  if (!trans) return -ENOMEM;
+    int ret = 0;
+    struct bio_vec bvec;
+    struct req_iterator iter;
+    uint32_t block_id = blk_rq_pos(rq);
 
-  rq_for_each_segment(bvec, rq, iter) {
-    unsigned long b_len = bvec.bv_len;
-    void *b_buf = page_address(bvec.bv_page) + bvec.bv_offset;
-    u64 block_id = pos >> SECTOR_SHIFT;
+    // Transaction
+    u64 transaction_id = get_random_u64();
+    transaction_t *trans = create_transaction(transaction_id, rq);
+    if (!trans) return -ENOMEM;
 
-    while (b_len) {
-      size_t chunk_size = min(b_len, (unsigned long)SECTOR_SIZE);
+    // Iterate over all requests segments
+    rq_for_each_segment(bvec, rq, iter)
+    {
+        // Get data buffer and size
+        void* b_buf = page_address(bvec.bv_page) + bvec.bv_offset;
 
-      chunk_t *chk = create_chunk(trans, block_id, b_buf, chunk_size);
-      if (!chk) {
-        printk(KERN_ERR "netdisk: create_chunk failed (transaction %llu, block_id %llu)", trans->id, block_id);
-        return BLK_STS_IOERR;
-      }
+        printk(KERN_INFO "netdisk: create_chunk transaction %llu, block_id %u, length %u (%u blocks)", trans->id, block_id, bvec.bv_len, bvec.bv_len >> 9);
+        chunk_t *chk = create_chunk(trans, block_id, b_buf, bvec.bv_len);
+        if (!chk) {
+          printk(KERN_ERR "netdisk: create_chunk failed (transaction %llu, block_id %u)", trans->id, block_id);
+          return BLK_STS_IOERR;
+        }
 
-      pos += chunk_size;
-      b_buf += chunk_size;
-      b_len -= chunk_size;
-      block_id++;
+        enqueue_chunk(trans, chk);
 
-      enqueue_chunk(trans, chk);
+        // Increment block_id
+        block_id += bvec.bv_len >> 9;
     }
-  }
 
-  return 0;
+    return ret;
 }
 
 void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t len) {

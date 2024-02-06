@@ -150,6 +150,7 @@ void send_chunk_request(struct socket *tcp_socket, struct AES_ctx *context, tran
   }
 
   header->block_id = chunk->block_id;
+  header->block_length = chunk->size;
   header->transaction_id = trans->id;
   header->user_data = 0;
 
@@ -157,8 +158,8 @@ void send_chunk_request(struct socket *tcp_socket, struct AES_ctx *context, tran
     printk(KERN_ERR "netdisk: Error packet length is not a multiple of 16: %lu\n", (sizeof(packet_header_t) + header->length));
   }
 
-  // printk(KERN_NOTICE "netdisk: Sending Op %s, Transaction %llu, Chunk %llu, Length %u\n", packet_command_to_str(header->operation), trans->id, chunk->block_id,
-  //        header->length);
+  printk(KERN_NOTICE "netdisk: Sending %s (Transaction %llu, block_id %llu, size %u, payload %ubytes\n", packet_command_to_str(header->operation), trans->id, chunk->block_id,
+          header->block_length, header->length);
 
   uint32_t olen = sizeof(packet_header_t) + header->length;
 
