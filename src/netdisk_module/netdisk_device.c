@@ -64,12 +64,14 @@ static int netdisk_process_request(struct request *rq) {
         // Get data buffer and size
         void* b_buf = page_address(bvec.bv_page) + bvec.bv_offset;
 
-        printk(KERN_INFO "netdisk: create_chunk transaction %llu, block_id %u, length %u (%u blocks)", trans->id, block_id, bvec.bv_len, bvec.bv_len >> 9);
+        // Create the chunk
         chunk_t *chk = create_chunk(trans, block_id, b_buf, bvec.bv_len);
         if (!chk) {
-          printk(KERN_ERR "netdisk: create_chunk failed (transaction %llu, block_id %u)", trans->id, block_id);
+          printk(KERN_ALERT "netdisk: create_chunk failed (transaction %llu, block_id %u)", trans->id, block_id);
           return BLK_STS_IOERR;
         }
+
+        // printk(KERN_INFO "netdisk: create_chunk transaction %llu, block_id %u, length %u (%u blocks)", trans->id, block_id, bvec.bv_len, bvec.bv_len >> 9);
 
         enqueue_chunk(trans, chk);
 
@@ -83,7 +85,6 @@ static int netdisk_process_request(struct request *rq) {
 void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t len) {
   transaction_t *trans;
   if ((trans = find_transaction(trans_id)) == NULL) {
-    printk(KERN_ERR "netdisk: transaction %llu not found", trans_id);
     return;
   }
 
@@ -93,16 +94,8 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
     return;
   }
 
-  if (rq_data_dir(trans->request) != READ) {
-    if (data != NULL) {
-      printk(KERN_ERR "netdisk: data supplied for completion of WRITE chunk (transaction %llu, chunk %llu)", trans_id, block_id);
-      return;
-    }
-  } else {
-    if (data == NULL) {
-      printk(KERN_ERR "netdisk: no data supplied for completion of READ chunk (transaction %llu, chunk %llu)", trans_id, block_id);
-      return;
-    }
+  // Get the data from the chunk if this was a read.
+  if (rq_data_dir(trans->request) == READ) {
     memcpy(chunk->buffer, data, chunk->size);
   }
 
@@ -129,20 +122,17 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
 void netdisk_error_chunk(u64 trans_id, u64 block_id, u8 error) {
   transaction_t *trans;
   if ((trans = find_transaction(trans_id)) == NULL) {
-    printk(KERN_ERR "netdisk: transaction %llu not found", trans_id);
     return;
   }
 
   chunk_t *chunk;
   if ((chunk = find_chunk(trans, block_id)) == NULL) {
-    printk(KERN_ERR "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
+    printk(KERN_ALERT "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
     return;
   }
 
   // Release the chunk
   release_chunk(trans, block_id);
-
-  printk(KERN_ERR "netdisk: chunk %llu error (transaction %llu)", block_id, trans_id);
 
   // End the request with error
   blk_update_request(trans->request, BLK_STS_IOERR, trans->completed_bytes);
@@ -150,8 +140,6 @@ void netdisk_error_chunk(u64 trans_id, u64 block_id, u8 error) {
 
   // Release the transaction
   release_transaction(trans_id);
-
-  printk(KERN_ERR "netdisk: transaction %llu error", trans_id);
 }
 
 // queue callback function
@@ -184,7 +172,7 @@ int create_netdisk_device(char *devicename, struct socket *tcp_socket) {
   // Register new block device and get device major number
   dev_major = register_blkdev(dev_major, devicename);
   if (dev_major < 0) {
-    printk(KERN_ERR "netdisk: register_blkdev failed\n");
+    printk(KERN_ERR "netdisk: register block device failed\n");
     return -EBUSY;
   }
 
@@ -194,7 +182,7 @@ int create_netdisk_device(char *devicename, struct socket *tcp_socket) {
   dev->tcp_socket = tcp_socket;
 
   if (dev == NULL) {
-    printk(KERN_ERR "netdisk: Failed to allocate struct dev\n");
+    printk(KERN_ERR "netdisk: failed to allocate devicev\n");
     release_netdisk_device();
 
     return -ENOMEM;
@@ -215,11 +203,12 @@ int create_netdisk_device(char *devicename, struct socket *tcp_socket) {
   // Initialise and Configure the tag set for queue
   dev->tag_set = kzalloc(sizeof(struct blk_mq_tag_set), GFP_KERNEL);
   if (dev->tag_set == NULL) {
-    printk(KERN_ERR "netdisk: Failed to allocate blk_mq_tag_set\n");
+    printk(KERN_ERR "netdisk: failed to allocate blk_mq_tag_set\n");
     release_netdisk_device();
 
     return -ENOMEM;
   }
+
   dev->tag_set->ops = &netdisk_mq_ops;
   dev->tag_set->queue_depth = 128;
   dev->tag_set->numa_node = NUMA_NO_NODE;
@@ -279,6 +268,8 @@ int create_netdisk_device(char *devicename, struct socket *tcp_socket) {
 }
 
 void error_all_transactions(void) {
+  // Iterate all transactions and report IOERR
+
   struct rb_node *next, *node = rb_first(&trans_tree);
   while (node) {
     transaction_t *trans = container_of(node, transaction_t, node);

@@ -26,7 +26,7 @@ int packet_create_client_socket(struct socket **tcp_socket, struct sockaddr_in *
   // Create TCP socket
   ret = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP, tcp_socket);
   if (ret < 0) {
-    printk(KERN_ERR "Error creating socket: %d\n", ret);
+    printk(KERN_ERR "netdisk: error creating socket: %d\n", ret);
     return ret;
   }
 
@@ -34,7 +34,7 @@ int packet_create_client_socket(struct socket **tcp_socket, struct sockaddr_in *
   ret = kernel_connect(*tcp_socket, (struct sockaddr *)addr, sizeof(*addr), 0);
   if (ret < 0) {
     sock_release(*tcp_socket);
-    printk(KERN_ERR "Error connecting socket: %d\n", ret);
+    printk(KERN_ERR "netdisk: error connecting: %d\n", ret);
     return ret;
   }
 
@@ -155,11 +155,11 @@ void send_chunk_request(struct socket *tcp_socket, struct AES_ctx *context, tran
   header->user_data = 0;
 
   if ((sizeof(packet_header_t) + header->length) % 16 != 0) {
-    printk(KERN_ERR "netdisk: Error packet length is not a multiple of 16: %lu\n", (sizeof(packet_header_t) + header->length));
+    printk(KERN_ERR "netdisk: packet length is not a multiple of 16: %lu\n", (sizeof(packet_header_t) + header->length));
   }
 
-  printk(KERN_NOTICE "netdisk: Sending %s (Transaction %llu, block_id %llu, size %u, payload %ubytes\n", packet_command_to_str(header->operation), trans->id, chunk->block_id,
-          header->block_length, header->length);
+  // printk(KERN_NOTICE "netdisk: Sending %s (Transaction %llu, block_id %llu, size %u, payload %ubytes\n", packet_command_to_str(header->operation), trans->id, chunk->block_id,
+  //         header->block_length, header->length);
 
   uint32_t olen = sizeof(packet_header_t) + header->length;
 

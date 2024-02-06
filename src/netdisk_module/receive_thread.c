@@ -73,16 +73,16 @@ static int run_receive_thread(void *data) {
           ssize_t bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
             // Handle the error case
-            printk(KERN_ERR "netdisk: send failed, closing connection");
+            printk(KERN_ERR "netdisk: handshake send failed, closing connection");
             running = false;
           }
           // Set State
           session->state = NETDISK_SESSION_STATE_HANDSHAKE;
         } else if (recvlen == -999) {
-          printk(KERN_ALERT "netdisk: Timeout, closing connection");
+          printk(KERN_ERR "netdisk: receive IV timeout, closing connection");
           running = false;
         } else {
-          printk(KERN_ALERT "netdisk: Error, closing connection");
+          printk(KERN_ERR "netdisk: recieve IV error, closing connection");
           running = false;
         }
         break;
@@ -95,13 +95,13 @@ static int run_receive_thread(void *data) {
           // Check Magic number
           packet = (packet_handshake_t *)session->buffer;
           if (!packet_magic_check(packet)) {
-            printk(KERN_ALERT "netdisk: Bad magic number from server, disconnecting");
+            printk(KERN_ERR "netdisk: bad magic number from server (likely wrong encryption key), closing connection");
             running = false;
             break;
           }
           // Check Version
           if (!packet_version_check(packet, false)) {
-            printk(KERN_ALERT "netdisk: Incompatible version from server, disconnecting");
+            printk(KERN_ERR "netdisk: incompatible version from server, closing connection");
             running = false;
             break;
           }
@@ -110,7 +110,7 @@ static int run_receive_thread(void *data) {
           // Set state ready
           session->state = NETDISK_SESSION_STATE_READY;
         } else if (recvlen == -999) {
-          printk(KERN_ALERT "netdisk: Timeout, closing connection");
+          printk(KERN_ERR "netdisk: receive handshake timeout, closing connection");
           running = false;
         } else {
           running = false;
@@ -125,14 +125,14 @@ static int run_receive_thread(void *data) {
           header = (packet_header_t *)session->buffer;
           // Check we have enough buffer
           if (header->length > NETDISK_MAX_PACKET_SIZE) {
-            printk(KERN_ALERT "netdisk: Packet too large (%d bytes, limit %d)", header->length, NETDISK_MAX_PACKET_SIZE);
+            printk(KERN_ERR "netdisk: packet too large (%d bytes, limit %d)", header->length, NETDISK_MAX_PACKET_SIZE);
             running = false;
             break;
           }
           // If there's more data, receive it
           if (header->length > 0) {
             if (packet_recv(session->socket_fd, (uint8_t *)session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
-              printk(KERN_ALERT "netdisk: Timeout receiving packet data (%d bytes)", header->length);
+              printk(KERN_ALERT "netdisk: receive packet data timeout (%d bytes)", header->length);
               running = false;
               break;
             }
@@ -199,7 +199,7 @@ bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) 
       netdisk_error_chunk(header->transaction_id, header->block_id, header->operation);
       break;
     default:
-      printk(KERN_NOTICE "netdisk: Received unknown operation %d\n", header->operation);
+      printk(KERN_ALERT "netdisk: Received unknown operation %d\n", header->operation);
   }
 
   return false;

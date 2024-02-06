@@ -70,14 +70,13 @@ static int run_send_thread(void *data) {
 
 void send_thread_start(void) {
   if (send_thread) {
-    printk(KERN_INFO "netdisk: Send thread already started\n");
     return;
   }
 
   thread_running = true;
   send_thread = kthread_run(run_send_thread, NULL, "netdisk_send_thread");
   if (IS_ERR(send_thread)) {
-    printk(KERN_ERR "netdisk: Failed to start send thread\n");
+    printk(KERN_ERR "netdisk: failed to start send thread\n");
     thread_running = false;
     send_thread = NULL;
   }
@@ -86,7 +85,7 @@ void send_thread_start(void) {
 void enqueue_chunk(transaction_t *trans, chunk_t *chunk) {
   chunk_request_t *req = kmalloc(sizeof(*req), GFP_KERNEL);
   if (!req) {
-    printk(KERN_ERR "netdisk: Failed to allocate chunk request\n");
+    printk(KERN_ERR "netdisk: failed to allocate chunk request\n");
     return;
   }
 
@@ -100,12 +99,8 @@ void enqueue_chunk(transaction_t *trans, chunk_t *chunk) {
 
 void send_thread_stop(void) {
   if (!send_thread) {
-    printk(KERN_INFO "netdisk: Send thread not running\n");
     return;
   }
-
-  printk(KERN_NOTICE "netdisk: Stopping send thread\n");
-
   // Set the flag to false to stop the thread and wake it up
   thread_running = false;
   wake_up(&wait_queue);
@@ -113,5 +108,4 @@ void send_thread_stop(void) {
   // Wait for the thread to finish
   kthread_stop(send_thread);
   send_thread = NULL;
-  printk(KERN_NOTICE "netdisk: Stopped send thread\n");
 }

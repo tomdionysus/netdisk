@@ -65,7 +65,7 @@ MODULE_PARM_DESC(devicename, "Device name");
 
 int load_parameters(void) {
   if (!address || in4_pton(address, -1, (u8 *)&(config.address.sin_addr), '\0', NULL) == 0) {
-    printk(KERN_ALERT "netdisk: address must be a valid IP address\n");
+    printk(KERN_ERR "netdisk: address must be a valid IP address\n");
     return -EINVAL;
   }
 
@@ -73,7 +73,7 @@ int load_parameters(void) {
   config.address.sin_port = htons(port);
 
   if (!key || strlen(key) != 64 || parse_key(key, config.key) == -EINVAL) {
-    printk(KERN_ALERT "netdisk: key must be a 64 character hex value\n");
+    printk(KERN_ERR "netdisk: key must be a 64 character hex value\n");
     return -EINVAL;
   }
 
@@ -89,7 +89,7 @@ static int __init netdisk_driver_init(void) {
 
   // Create Socket
   if (packet_create_client_socket(&client_socket, &config.address) != 0) {
-    printk(KERN_ALERT "netdisk: cannot connect to server: %pI4 port: %hu\n", &config.address.sin_addr, ntohs(config.address.sin_port));
+    printk(KERN_ERR "netdisk: cannot connect to server: %pI4 port: %hu\n", &config.address.sin_addr, ntohs(config.address.sin_port));
     return -EINVAL;
   }
 
@@ -103,7 +103,7 @@ static int __init netdisk_driver_init(void) {
   create_netdisk_device(config.devicename, client_socket);
 
   // Loaded Banner
-  printk(KERN_NOTICE "netdisk: Module loaded. Server: %pI4 Port: %hu, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port),
+  printk(KERN_NOTICE "netdisk: loaded. Server: %pI4 Port: %hu, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port),
          config.devicename);
 
   return 0;
