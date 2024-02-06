@@ -9,7 +9,6 @@ A SAN-like remote block device server/client for Linux in C/C++. netdisk has two
 * Not performance optimised
 * Static drive size 100Mb
 * IOCTL not implemented
-* No reconnect
 * Will not automatically unload when disconnected
 * Will not automatically reconnect
 
