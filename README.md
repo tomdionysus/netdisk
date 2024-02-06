@@ -5,7 +5,13 @@ A SAN-like remote block device server/client for Linux in C/C++. netdisk has two
 ## Status
 
 **v0.0.1 ALPHA** 
-* Working not performance optimised
+* Working
+* Not performance optimised
+* Static drive size 100Mb
+* IOCTL not implemented
+* No reconnect
+* Will not automatically unload when disconnected
+* Will not automatically reconnect
 
 ## Overview
 
@@ -41,15 +47,16 @@ depmod
 
 ### Server
 
-You must supply a 256bit encrption key as a hex string, and the file of the disk image.
+You must supply a 25 6bit encrption key as a 64 character hex string, and the file of the disk image, which must exist.
 
 ```sh
+dd if=/dev/zero of=./disk.netdisk bs=1M count=100
 netdiskd --key=6f334a6b4aa5a7ac8462387a3cdb8f5755b3c1ef0947cb1492c86793265166c0 --file=./disk.netdisk
 ```
 
 ### Client
 
-The client is a linux kernel module, that can be loaded using `modprobe`. You must supply an indentical 256bit encrption key as a hex string, as well as the ip address of a running `netdiskd` server.
+The client is a linux kernel module, that can be loaded using `modprobe`. You must supply an indentical 256 bit encrption key, as well as the IP address of a running `netdiskd` server.
 
 ```sh
 modprobe netdisk key=6f334a6b4aa5a7ac8462387a3cdb8f5755b3c1ef0947cb1492c86793265166c0 address=192.168.1.40
