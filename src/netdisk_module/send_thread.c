@@ -121,7 +121,7 @@ void send_chunk_request(session_t *session, transaction_t *trans, chunk_t *chunk
   // trans->id, header->block_id,  header->block_length, header->length);
 
   // Encrypt
-  AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t *)header, sizeof(packet_header_t));
+  AES_CBC_encrypt_buffer(session->aes_context, (uint8_t *)header, (uint8_t *)header, sizeof(packet_header_t));
 
   // Send
   if (packet_send(session->socket_fd, (uint8_t *)header, sizeof(packet_header_t)) != sizeof(packet_header_t)) {
@@ -136,8 +136,7 @@ void send_chunk_request(session_t *session, transaction_t *trans, chunk_t *chunk
     // Encrypt
     uint8_t *data = kmalloc(chunk->size, GFP_KERNEL);
 
-    memcpy(data, chunk->buffer, chunk->size);
-    AES_CBC_encrypt_buffer(&session->tx_aes_context, data, chunk->size);
+    AES_CBC_encrypt_buffer(session->aes_context, data, chunk->buffer, chunk->size);
 
     // Send
     if (packet_send(session->socket_fd, data, chunk->size) != chunk->size) {

@@ -99,7 +99,7 @@ void netdisk_complete_chunk(session_t *session, packet_header_t *header) {
       return;
     }
     // And Decrypt it
-    AES_CBC_decrypt_buffer(&session->rx_aes_context, chunk->buffer, header->length);
+    AES_CBC_decrypt_buffer(session->aes_context, chunk->buffer, chunk->buffer, header->length);
   }
 
   // printk(KERN_NOTICE "netdisk: chunk %llu complete (transaction %llu, block %d of %d)", block_id, trans_id, trans->completed_chunks, trans->total_chunks);

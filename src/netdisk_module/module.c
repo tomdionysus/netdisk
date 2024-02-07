@@ -92,9 +92,18 @@ static int __init netdisk_driver_init(void) {
   memset(session, 0, sizeof(session_t));
   session->state = NETDISK_SESSION_STATE_INITIAL;
 
+  // Setup AES
+  if ((session->aes_context = AES_CBC_alloc(config.key)) == NULL) {
+    printk(KERN_ERR "netdisk: cannot create AES CBC context");
+    kfree(session);
+    return -EINVAL;
+  }
+
   // Create Socket
   if (packet_create_client_socket(&session->socket_fd, &config.address) != 0) {
     printk(KERN_ERR "netdisk: cannot connect to server: %pI4 port: %hu\n", &config.address.sin_addr, ntohs(config.address.sin_port));
+    AES_CBC_release(session->aes_context);
+    kfree(session);
     return -EINVAL;
   }
 
@@ -128,6 +137,9 @@ static void __exit netdisk_driver_exit(void) {
 
   // Release socket
   packet_destroy_socket(session->socket_fd);
+
+  // Release AES
+  AES_CBC_release(session->aes_context);
 
   // Free the session
   kfree(session);

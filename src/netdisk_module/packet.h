@@ -38,7 +38,7 @@
 #define NETDISK_BLOCK_SIZE 512
 #define NETDISK_BLOCK_SHIFT 9
 #define NETDISK_HEADER_SIZE 64
-#define NETDISK_MAX_PACKET_SIZE ((1024*1024)+32)
+#define NETDISK_MAX_PACKET_SIZE ((1024 * 1024) + 32)
 #define NETDISK_KEY_SIZE 32
 
 #define NETDISK_VERSION_MAJOR 0x00
@@ -86,8 +86,7 @@ typedef struct session {
   struct socket* socket_fd;
   struct sockaddr_in remote_addr;
   uint8_t state;
-  struct AES_ctx rx_aes_context;
-  struct AES_ctx tx_aes_context;
+  struct AES_ctx* aes_context;
   uint64_t node_id;
   char address_str[32];
   uint8_t* buffer;

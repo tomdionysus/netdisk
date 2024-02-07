@@ -46,7 +46,7 @@ static int run_receive_thread(void *data) {
         // Initial state.
         get_random_bytes(&iv, NETDISK_KEY_SIZE);
         // Setup TX AES Context
-        AES_init_ctx_iv(&session->tx_aes_context, config.key, (uint8_t *)&iv);
+        AES_CBC_set_tx_iv(session->aes_context, (uint8_t *)&iv);
         // Send IV
         packet_send(session->socket_fd, (uint8_t *)&iv, NETDISK_KEY_SIZE);
         // Set State
@@ -57,13 +57,13 @@ static int run_receive_thread(void *data) {
         recvlen = packet_recv(session->socket_fd, (uint8_t *)&iv, NETDISK_KEY_SIZE, 5000);
         if (recvlen == NETDISK_KEY_SIZE) {
           // Setup RX AES Context
-          AES_init_ctx_iv(&session->rx_aes_context, config.key, (uint8_t *)&iv);
+          AES_CBC_set_rx_iv(session->aes_context, (uint8_t *)&iv);
           // Init Handshake, Create NodeID
           packet_handshake_init(handshake);
           // Create a random node ID
           get_random_bytes((uint8_t *)&handshake->node_id, sizeof(handshake->node_id));
           // Encrypt
-          AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t *)handshake, sizeof(packet_handshake_t));
+          AES_CBC_encrypt_buffer(session->aes_context, (uint8_t *)handshake, (uint8_t *)handshake, sizeof(packet_handshake_t));
           // Send Handshake
           ssize_t bytes_sent = packet_send(session->socket_fd, (uint8_t *)handshake, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
@@ -86,7 +86,7 @@ static int run_receive_thread(void *data) {
         recvlen = packet_recv(session->socket_fd, (uint8_t *)handshake, sizeof(packet_handshake_t), 5000);
         if (recvlen == sizeof(packet_handshake_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t *)handshake, recvlen);
+          AES_CBC_decrypt_buffer(session->aes_context, (uint8_t *)handshake, (uint8_t *)handshake, recvlen);
           // Check Magic number
           if (!packet_magic_check(handshake)) {
             printk(KERN_ERR "netdisk: bad magic number from server (likely wrong encryption key), closing connection");
@@ -115,7 +115,7 @@ static int run_receive_thread(void *data) {
         recvlen = packet_recv(session->socket_fd, (uint8_t *)header, sizeof(packet_header_t), 10000);
         if (recvlen == sizeof(packet_header_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t *)header, sizeof(packet_header_t));
+          AES_CBC_decrypt_buffer(session->aes_context, (uint8_t *)header, (uint8_t *)header, sizeof(packet_header_t));
           // Process the handshake, stop if return true
           if (process_packet(session, header)) {
             running = false;

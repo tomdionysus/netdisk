@@ -103,33 +103,33 @@ ssize_t packet_send(int socket_fd, const uint8_t *buffer, size_t size) {
 }
 
 ssize_t packet_recv(int socket_fd, uint8_t *buffer, size_t size, int timeout_ms) {
-    ssize_t total_received = 0;
-    ssize_t received = 0;
-    struct timeval timeout;
+  ssize_t total_received = 0;
+  ssize_t received = 0;
+  struct timeval timeout;
 
-    // Set the socket timeout for receiving
-    timeout.tv_sec = timeout_ms / 1000;
-    timeout.tv_usec = (timeout_ms % 1000) * 1000;
-    setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof timeout);
+  // Set the socket timeout for receiving
+  timeout.tv_sec = timeout_ms / 1000;
+  timeout.tv_usec = (timeout_ms % 1000) * 1000;
+  setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof timeout);
 
-    while (total_received < size) {
-        received = recv(socket_fd, buffer + total_received, size - total_received, MSG_WAITALL);
+  while (total_received < size) {
+    received = recv(socket_fd, buffer + total_received, size - total_received, MSG_WAITALL);
 
-        if (received == 0) {
-            // Connection closed
-            break;
-        } else if (received < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Timeout
-                return -999;
-            } else {
-                // Other errors
-                return -1;
-            }
-        }
-
-        total_received += received;
+    if (received == 0) {
+      // Connection closed
+      break;
+    } else if (received < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Timeout
+        return -999;
+      } else {
+        // Other errors
+        return -1;
+      }
     }
 
-    return total_received;
+    total_received += received;
+  }
+
+  return total_received;
 }
