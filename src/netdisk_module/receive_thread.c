@@ -24,53 +24,48 @@
 
 // Externs
 extern netdisk_config_t config;
-extern struct socket *client_socket;
 
 // Thread pointer
 static struct task_struct *receive_thread = NULL;
 
-session_t *session;
-
 static int run_receive_thread(void *data) {
-  // Setup session
-  session = kmalloc(sizeof(session_t), GFP_KERNEL);
-  session->socket_fd = client_socket;
-  session->state = NETDISK_SESSION_STATE_INITIAL;
-  session->buffer = kmalloc(sizeof(packet_header_t), GFP_KERNEL);
+  session_t *session = (session_t *)data;
 
   bool running = true;
   ssize_t recvlen;
 
-  packet_handshake_t *packet;
-  packet_header_t *header;
+  uint8_t iv[NETDISK_KEY_SIZE];
+  packet_handshake_t handshake_raw;
+  packet_handshake_t *handshake = &handshake_raw;
+  packet_header_t header_raw;
+  packet_header_t *header = &header_raw;
 
   while (!kthread_should_stop() && running) {
     switch (session->state) {
       case NETDISK_SESSION_STATE_INITIAL:
         // Initial state.
-        get_random_bytes(session->buffer, NETDISK_KEY_SIZE);
+        get_random_bytes(&iv, NETDISK_KEY_SIZE);
         // Setup TX AES Context
-        AES_init_ctx_iv(&session->tx_aes_context, config.key, session->buffer);
+        AES_init_ctx_iv(&session->tx_aes_context, config.key, (uint8_t *)&iv);
         // Send IV
-        packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
+        packet_send(session->socket_fd, (uint8_t *)&iv, NETDISK_KEY_SIZE);
         // Set State
         session->state = NETDISK_SESSION_STATE_IV;
         break;
       case NETDISK_SESSION_STATE_IV:
         // Wait for other side of IV
-        recvlen = packet_recv(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 5000);
+        recvlen = packet_recv(session->socket_fd, (uint8_t *)&iv, NETDISK_KEY_SIZE, 5000);
         if (recvlen == NETDISK_KEY_SIZE) {
           // Setup RX AES Context
-          AES_init_ctx_iv(&session->rx_aes_context, config.key, session->buffer);
+          AES_init_ctx_iv(&session->rx_aes_context, config.key, (uint8_t *)&iv);
           // Init Handshake, Create NodeID
-          packet = (packet_handshake_t *)session->buffer;
-          packet_handshake_init(packet);
+          packet_handshake_init(handshake);
           // Create a random node ID
-          get_random_bytes((uint8_t *)&packet->node_id, sizeof(packet->node_id));
+          get_random_bytes((uint8_t *)&handshake->node_id, sizeof(handshake->node_id));
           // Encrypt
-          AES_CBC_encrypt_buffer(&session->tx_aes_context, session->buffer, sizeof(packet_handshake_t));
+          AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t *)handshake, sizeof(packet_handshake_t));
           // Send Handshake
-          ssize_t bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
+          ssize_t bytes_sent = packet_send(session->socket_fd, (uint8_t *)handshake, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
             // Handle the error case
             printk(KERN_ERR "netdisk: handshake send failed, closing connection");
@@ -87,26 +82,25 @@ static int run_receive_thread(void *data) {
         }
         break;
       case NETDISK_SESSION_STATE_HANDSHAKE:
-        // Wait for handshake packet
-        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 5000);
+        // Wait for handshake handshake
+        recvlen = packet_recv(session->socket_fd, (uint8_t *)handshake, sizeof(packet_handshake_t), 5000);
         if (recvlen == sizeof(packet_handshake_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
+          AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t *)handshake, recvlen);
           // Check Magic number
-          packet = (packet_handshake_t *)session->buffer;
-          if (!packet_magic_check(packet)) {
+          if (!packet_magic_check(handshake)) {
             printk(KERN_ERR "netdisk: bad magic number from server (likely wrong encryption key), closing connection");
             running = false;
             break;
           }
           // Check Version
-          if (!packet_version_check(packet, false)) {
+          if (!packet_version_check(handshake, false)) {
             printk(KERN_ERR "netdisk: incompatible version from server, closing connection");
             running = false;
             break;
           }
           // Get NodeID
-          session->node_id = packet->node_id;
+          session->node_id = handshake->node_id;
           // Set state ready
           session->state = NETDISK_SESSION_STATE_READY;
         } else if (recvlen == -999) {
@@ -117,13 +111,13 @@ static int run_receive_thread(void *data) {
         }
         break;
       case NETDISK_SESSION_STATE_READY:
-        // Read a header, then a packet of that length
-        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 10000);
+        // Read a header, then a handshake of that length
+        recvlen = packet_recv(session->socket_fd, (uint8_t *)header, sizeof(packet_header_t), 10000);
         if (recvlen == sizeof(packet_header_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
-          // Process the packet, stop if return true
-          if (process_packet(session, (packet_header_t *)session->buffer, header->length == 0 ? NULL : (uint8_t *)session->buffer + sizeof(packet_header_t))) {
+          AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t *)header, sizeof(packet_header_t));
+          // Process the handshake, stop if return true
+          if (process_packet(session, header)) {
             running = false;
             break;
           }
@@ -140,23 +134,19 @@ static int run_receive_thread(void *data) {
   error_all_transactions();
   release_all_transactions();
 
-  // Free the session
-  kfree(session->buffer);
-  kfree(session);
-
   receive_thread = NULL;
 
   return 0;
 }
 
 // Create receive_thread
-int receive_thread_start(void) {
+int receive_thread_start(session_t *session) {
   if (receive_thread != NULL) {
     printk(KERN_ALERT "netdisk: receive_thread_start called but thread already started\n");
     return 0;
   }
 
-  receive_thread = kthread_run(run_receive_thread, NULL, "run_receive_thread");
+  receive_thread = kthread_run(run_receive_thread, session, "run_receive_thread");
   if (IS_ERR(receive_thread)) {
     printk(KERN_INFO "netdisk: failed to create run_receive_thread\n");
     return PTR_ERR(receive_thread);
@@ -165,8 +155,8 @@ int receive_thread_start(void) {
   return 0;
 }
 
-bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) {
-  // printk(KERN_NOTICE "netdisk: Incoming packet %s, Transaction %llu, Block %llu, Length %u\n", packet_reply_to_str(header->operation), header->transaction_id,
+bool process_packet(session_t *session, packet_header_t *header) {
+  // printk(KERN_NOTICE "netdisk: Incoming %s, Transaction %llu, Block %llu, Length %u\n", packet_reply_to_str(header->operation), header->transaction_id,
   //        header->block_id, header->length);
 
   switch (header->operation) {
@@ -185,7 +175,7 @@ bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) 
   return false;
 }
 
-void receive_thread_stop(void) {
+void receive_thread_stop(session_t *session) {
   if (!receive_thread) {
     return;
   }

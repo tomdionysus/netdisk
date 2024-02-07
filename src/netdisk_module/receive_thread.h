@@ -30,8 +30,8 @@
 
 #include "packet.h"
 
-int receive_thread_start(void);
-bool process_packet(session_t* session, packet_header_t* header, uint8_t* data);
-void receive_thread_stop(void);
+int receive_thread_start(session_t* session);
+bool process_packet(session_t* session, packet_header_t* header);
+void receive_thread_stop(session_t* session);
 
 #endif

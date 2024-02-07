@@ -47,8 +47,8 @@ static ushort port = NETDISK_DEFAULT_PORT;
 // Config
 netdisk_config_t config;
 
-// Socket
-struct socket *client_socket;
+// Session
+session_t *session;
 
 // Parameters
 module_param(address, charp, 0000);
@@ -87,24 +87,28 @@ static int __init netdisk_driver_init(void) {
     return -EINVAL;
   }
 
+  // Setup session
+  session = kmalloc(sizeof(session_t), GFP_KERNEL);
+  memset(session, 0, sizeof(session_t));
+  session->state = NETDISK_SESSION_STATE_INITIAL;
+
   // Create Socket
-  if (packet_create_client_socket(&client_socket, &config.address) != 0) {
+  if (packet_create_client_socket(&session->socket_fd, &config.address) != 0) {
     printk(KERN_ERR "netdisk: cannot connect to server: %pI4 port: %hu\n", &config.address.sin_addr, ntohs(config.address.sin_port));
     return -EINVAL;
   }
 
   // Receive Thread
-  receive_thread_start();
+  receive_thread_start(session);
 
   // Send Thread
-  send_thread_start();
+  send_thread_start(session);
 
   // Start Device
-  create_netdisk_device(config.devicename, client_socket);
+  create_netdisk_device(config.devicename, session->socket_fd);
 
   // Loaded Banner
-  printk(KERN_NOTICE "netdisk: loaded. Server: %pI4 Port: %hu, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port),
-         config.devicename);
+  printk(KERN_NOTICE "netdisk: loaded. Server: %pI4 Port: %hu, Device Name: %s\n", &config.address.sin_addr, ntohs(config.address.sin_port), config.devicename);
 
   return 0;
 }
@@ -114,16 +118,19 @@ static void __exit netdisk_driver_exit(void) {
   release_netdisk_device();
 
   // Send Thread
-  send_thread_stop();
+  send_thread_stop(session);
 
   // Receive Thread
-  receive_thread_stop();
+  receive_thread_stop(session);
 
   // Kill all transactions
   release_all_transactions();
 
   // Release socket
-  packet_destroy_socket(client_socket);
+  packet_destroy_socket(session->socket_fd);
+
+  // Free the session
+  kfree(session);
 }
 
 module_init(netdisk_driver_init);

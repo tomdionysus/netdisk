@@ -124,8 +124,6 @@ int packet_destroy_socket(struct socket* tcp_socket);
 ssize_t packet_recv(struct socket* tcp_socket, uint8_t* buffer, size_t size, int timeout_ms);
 ssize_t packet_send(struct socket* tcp_socket, uint8_t* buffer, size_t size);
 
-void send_chunk_request(struct socket* tcp_socket, struct AES_ctx* context, transaction_t* trans, chunk_t* chunk);
-
 void packet_handshake_init(packet_handshake_t* packet);
 bool packet_magic_check(packet_handshake_t* packet);
 bool packet_version_check(packet_handshake_t* packet, bool strict);

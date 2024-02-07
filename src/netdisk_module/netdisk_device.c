@@ -17,16 +17,10 @@ static int netdisk_open(struct gendisk *disk, blk_mode_t mode) {
     return -ENXIO;
   }
 
-  printk(KERN_INFO "netdisk: netdisk_open");
-
   return 0;
 }
 
-static void netdisk_release(struct gendisk *disk) {
-  blk_put_queue(disk->queue);
-
-  printk(KERN_INFO "netdisk: netdisk_release");
-}
+static void netdisk_release(struct gendisk *disk) { blk_put_queue(disk->queue); }
 
 static int netdisk_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd, unsigned long arg) {
   if (cmd == HDIO_GETGEO) {
@@ -48,38 +42,37 @@ static int netdisk_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd, 
 }
 
 static int netdisk_process_request(struct request *rq) {
-    int ret = 0;
-    struct bio_vec bvec;
-    struct req_iterator iter;
-    uint32_t block_id = blk_rq_pos(rq);
+  int ret = 0;
+  struct bio_vec bvec;
+  struct req_iterator iter;
+  uint32_t block_id = blk_rq_pos(rq);
 
-    // Transaction
-    u64 transaction_id = get_random_u64();
-    transaction_t *trans = create_transaction(transaction_id, rq);
-    if (!trans) return -ENOMEM;
+  // Transaction
+  u64 transaction_id = get_random_u64();
+  transaction_t *trans = create_transaction(transaction_id, rq);
+  if (!trans) return -ENOMEM;
 
-    // Iterate over all requests segments
-    rq_for_each_segment(bvec, rq, iter)
-    {
-        // Get data buffer and size
-        void* b_buf = page_address(bvec.bv_page) + bvec.bv_offset;
+  // Iterate over all requests segments
+  rq_for_each_segment(bvec, rq, iter) {
+    // Get data buffer and size
+    void *b_buf = page_address(bvec.bv_page) + bvec.bv_offset;
 
-        // Create the chunk
-        chunk_t *chk = create_chunk(trans, block_id, b_buf, bvec.bv_len);
-        if (!chk) {
-          printk(KERN_ALERT "netdisk: create_chunk failed (transaction %llu, block_id %u)", trans->id, block_id);
-          return BLK_STS_IOERR;
-        }
-
-        // printk(KERN_INFO "netdisk: create_chunk transaction %llu, block_id %u, length %u (%u blocks)", trans->id, block_id, bvec.bv_len, bvec.bv_len >> 9);
-
-        enqueue_chunk(trans, chk);
-
-        // Increment block_id
-        block_id += bvec.bv_len >> 9;
+    // Create the chunk
+    chunk_t *chk = create_chunk(trans, block_id, b_buf, bvec.bv_len);
+    if (!chk) {
+      printk(KERN_ALERT "netdisk: create_chunk failed (transaction %llu, block_id %u)", trans->id, block_id);
+      return BLK_STS_IOERR;
     }
 
-    return ret;
+    // printk(KERN_INFO "netdisk: create_chunk transaction %llu, block_id %u, length %u (%u blocks)", trans->id, block_id, bvec.bv_len, bvec.bv_len >> 9);
+
+    enqueue_chunk(trans, chk);
+
+    // Increment block_id
+    block_id += bvec.bv_len >> 9;
+  }
+
+  return ret;
 }
 
 void netdisk_complete_chunk(session_t *session, packet_header_t *header) {
@@ -95,26 +88,27 @@ void netdisk_complete_chunk(session_t *session, packet_header_t *header) {
   }
 
   // If there's data, receive and decrypt.
-  if (rq_data_dir(trans->request) == READ && header->length > 0) {
+  if (rq_data_dir(trans->request) == READ) {
+    if (chunk->size != header->length) {
+      printk(KERN_ERR "netdisk: packet size mismatch %u != %u (transaction %llu, chunk %llu)", chunk->size, header->length, header->transaction_id,
+             header->block_id);
+    }
+
     if (packet_recv(session->socket_fd, chunk->buffer, header->length, 10000) != header->length) {
       printk(KERN_ALERT "netdisk: receive packet data timeout (%d bytes)", header->length);
       return;
     }
     // And Decrypt it
     AES_CBC_decrypt_buffer(&session->rx_aes_context, chunk->buffer, header->length);
-
-    if(chunk->size != header->length) {
-      printk(KERN_ERR "netdisk: packet size mismatch %u != %u (transaction %llu, chunk %llu)", chunk->size, header->length, header->transaction_id, header->block_id);
-    }
   }
 
   // printk(KERN_NOTICE "netdisk: chunk %llu complete (transaction %llu, block %d of %d)", block_id, trans_id, trans->completed_chunks, trans->total_chunks);
 
-  // Release the chunk
-  release_chunk(trans, header->block_id);
-
   // Report completed to request
   blk_update_request(trans->request, BLK_STS_OK, trans->completed_bytes);
+
+  // Release the chunk
+  release_chunk(trans, header->block_id);
 
   // If all the chunks are complete
   if (trans->completed_chunks == trans->total_chunks) {

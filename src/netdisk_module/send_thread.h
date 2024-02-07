@@ -28,6 +28,7 @@
 #include <linux/slab.h>
 #include <linux/wait.h>
 
+#include "packet.h"
 #include "transaction.h"
 
 typedef struct chunk_request {
@@ -36,8 +37,9 @@ typedef struct chunk_request {
   struct list_head list;
 } chunk_request_t;
 
-void send_thread_start(void);
+void send_thread_start(session_t* session);
 void enqueue_chunk(transaction_t* transaction, chunk_t* chunk);
-void send_thread_stop(void);
+void send_chunk_request(session_t* session, transaction_t* trans, chunk_t* chunk);
+void send_thread_stop(session_t* session);
 
 #endif  // SEND_THREAD_H

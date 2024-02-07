@@ -103,35 +103,33 @@ ssize_t packet_send(int socket_fd, const uint8_t *buffer, size_t size) {
 }
 
 ssize_t packet_recv(int socket_fd, uint8_t *buffer, size_t size, int timeout_ms) {
-  ssize_t total_received = 0;
-  ssize_t received = 0;
-  struct timeval timeout;
-  fd_set readfds;
+    ssize_t total_received = 0;
+    ssize_t received = 0;
+    struct timeval timeout;
 
-  while (total_received < size) {
-    FD_ZERO(&readfds);
-    FD_SET(socket_fd, &readfds);
-
-    // Set timeout
+    // Set the socket timeout for receiving
     timeout.tv_sec = timeout_ms / 1000;
     timeout.tv_usec = (timeout_ms % 1000) * 1000;
+    setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof timeout);
 
-    int activity = select(socket_fd + 1, &readfds, NULL, NULL, &timeout);
+    while (total_received < size) {
+        received = recv(socket_fd, buffer + total_received, size - total_received, MSG_WAITALL);
 
-    if (activity < 0) {
-      return -1;
-    } else if (activity == 0) {
-      // Timeout
-      return -999;
-    } else {
-      // Data is available to be read
-      received = recv(socket_fd, buffer + total_received, size - total_received, 0);
-      if (received <= 0) {
-        return -1;
-      }
-      total_received += received;
+        if (received == 0) {
+            // Connection closed
+            break;
+        } else if (received < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Timeout
+                return -999;
+            } else {
+                // Other errors
+                return -1;
+            }
+        }
+
+        total_received += received;
     }
-  }
 
-  return total_received;
+    return total_received;
 }

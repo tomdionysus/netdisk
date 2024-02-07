@@ -319,7 +319,8 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       } else {
         iolen = fread((uint8_t*)reply + sizeof(packet_header_t), header->block_length, 1, disk_fd);
         if (ferror(disk_fd)) {
-          log_error("(%s) NETDISK_COMMAND_READ File Error %s (pos %lu, length %lu)", address_port, iolen, iolen, header->block_id << NETDISK_BLOCK_SHIFT, header->block_length);
+          log_error("(%s) NETDISK_COMMAND_READ File Error %s (pos %lu, length %lu)", address_port, iolen, iolen, header->block_id << NETDISK_BLOCK_SHIFT,
+                    header->block_length);
           reply->operation = NETDISK_REPLY_ERROR;
         } else {
           log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", address_port, header->block_id, header->block_length);
@@ -340,7 +341,8 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       } else {
         iolen = fwrite(data, header->block_length, 1, disk_fd);
         if (ferror(disk_fd)) {
-          log_error("(%s) NETDISK_COMMAND_WRITE File Error %d (pos %lu, length %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT, header->block_length);
+          log_error("(%s) NETDISK_COMMAND_WRITE File Error %d (pos %lu, length %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT,
+                    header->block_length);
           reply->operation = NETDISK_REPLY_ERROR;
         } else {
           log_debug("(%s) NETDISK_COMMAND_WRITE Complete, Block %d Length %d", address_port, header->block_id, header->block_length);

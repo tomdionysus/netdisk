@@ -136,44 +136,6 @@ ssize_t packet_send(struct socket *tcp_socket, uint8_t *buffer, size_t size) {
   return total_sent;
 }
 
-void send_chunk_request(struct socket *tcp_socket, struct AES_ctx *context, transaction_t *trans, chunk_t *chunk) {
-  packet_header_t *header = kmalloc(sizeof(packet_header_t), GFP_KERNEL);
-  void *data = (uint8_t *)header + sizeof(packet_header_t);
-
-  if (rq_data_dir(trans->request) == WRITE) {
-    header->operation = NETDISK_COMMAND_WRITE;
-    header->length = chunk->size;
-    memcpy(data, chunk->buffer, chunk->size);
-  } else {
-    header->operation = NETDISK_COMMAND_READ;
-    header->length = 0;
-  }
-
-  header->block_id = chunk->block_id;
-  header->block_length = chunk->size;
-  header->transaction_id = trans->id;
-  header->user_data = 0;
-
-  if ((sizeof(packet_header_t) + header->length) % 16 != 0) {
-    printk(KERN_ERR "netdisk: packet length is not a multiple of 16: %lu\n", (sizeof(packet_header_t) + header->length));
-  }
-
-  // printk(KERN_NOTICE "netdisk: Sending %s (Transaction %llu, block_id %llu, size %u, payload %ubytes\n", packet_command_to_str(header->operation), trans->id, chunk->block_id,
-  //         header->block_length, header->length);
-
-  uint32_t olen = sizeof(packet_header_t) + header->length;
-
-  // Encrypt
-  AES_CBC_encrypt_buffer(context, (uint8_t *)header, olen);
-
-  // Send
-  if (packet_send(tcp_socket, (uint8_t *)header, olen) != olen) {
-    printk(KERN_ERR "netdisk: packet send failed (%u bytes)", olen);
-  }
-
-  kfree(header);
-}
-
 const char *packet_command_to_str(u16 command) {
   switch (command) {
     case NETDISK_COMMAND_INFO:
