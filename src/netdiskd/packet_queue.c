@@ -24,17 +24,22 @@ packet_queue_t* packet_queue_allocate(int32_t max_depth) {
 }
 
 // Function to enqueue a packet - blocks if the queue is full
-void packet_queue_enqueue(packet_queue_t* queue, packet_t* packet) {
+int packet_queue_enqueue(packet_queue_t* queue, packet_header_t* header, uint8_t *data) {
     packet_queue_node_t* new_node = malloc(sizeof(packet_queue_node_t));
-    if (!new_node) return;
+    if (!new_node) return PACKET_QUEUE_NOMEM;
 
-    new_node->packet = packet;
+    new_node->header = header;
+    new_node->data = data;
     new_node->next = NULL;
 
     pthread_mutex_lock(&queue->mutex);
 
-    while (queue->size >= queue->max_depth) {
-        pthread_cond_wait(&queue->not_full, &queue->mutex);
+    pthread_cond_wait(&queue->not_full, &queue->mutex);
+
+    // Return NULL if full (SIGINT, etc)
+    if (queue->size >= queue->max_depth) {
+        pthread_mutex_unlock(&queue->mutex);
+        return PACKET_QUEUE_SIGINT;
     }
 
     if (queue->tail) {
@@ -47,26 +52,26 @@ void packet_queue_enqueue(packet_queue_t* queue, packet_t* packet) {
 
     pthread_cond_signal(&queue->not_empty);
     pthread_mutex_unlock(&queue->mutex);
+
+    return PACKET_QUEUE_OK;
 }
 
 // Function to dequeue a packet - blocks if the queue is empty
-packet_t* packet_queue_dequeue(packet_queue_t* queue) {
+int packet_queue_dequeue(packet_queue_t* queue, packet_header_t** header, uint8_t **data) {
     pthread_mutex_lock(&queue->mutex);
 
     // Wait for not empty
-    while (queue->size == 0) {
-        pthread_cond_wait(&queue->not_empty, &queue->mutex);
-    }
-
+    pthread_cond_wait(&queue->not_empty, &queue->mutex);
+    
     // Return NULL if empty (SIGINT, etc)
-
-    if(queue->head == NULL) {
+    if (queue->size == 0) {
         pthread_mutex_unlock(&queue->mutex);
-        return NULL;
+        return PACKET_QUEUE_SIGINT;
     }
 
-    packet_queue_node_t* temp_node = queue->head;
-    packet_t* packet = temp_node->packet;
+    packet_queue_node_t* node = queue->head;
+    *header = node->header;
+    *data = node->data;
     queue->head = queue->head->next;
 
     if (queue->head == NULL) {
@@ -74,12 +79,12 @@ packet_t* packet_queue_dequeue(packet_queue_t* queue) {
     }
     queue->size--;
 
-    free(temp_node);
+    free(node);
 
     pthread_cond_signal(&queue->not_full);
     pthread_mutex_unlock(&queue->mutex);
 
-    return packet;
+    return PACKET_QUEUE_OK;
 }
 
 // Function to release all packets in the queue
@@ -88,10 +93,11 @@ void packet_queue_free_all_packets(packet_queue_t* queue) {
 
     packet_queue_node_t* current = queue->head;
     while (current) {
-        packet_queue_node_t* temp = current;
+        packet_queue_node_t* node = current;
         current = current->next;
-        free(temp->packet);
-        free(temp);
+        if(node->header) free(node->header);
+        if(node->data) free(node->data);
+        free(node);
     }
 
     queue->head = NULL;
