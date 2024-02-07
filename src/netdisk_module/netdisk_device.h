@@ -36,6 +36,8 @@
 #include <linux/vmalloc.h>
 #include <net/sock.h>
 
+#include "packet.h"
+
 #define TOTAL_SECTORS (100 * 1024 * 1024 / 512)
 
 struct netdisk {
@@ -48,7 +50,7 @@ struct netdisk {
 };
 
 int create_netdisk_device(char *devicename, struct socket *tcp_socket);
-void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t len);
+void netdisk_complete_chunk(session_t *session, packet_header_t *header);
 void netdisk_error_chunk(u64 trans_id, u64 block_id, u8 error);
 void error_all_transactions(void);
 int release_netdisk_device(void);

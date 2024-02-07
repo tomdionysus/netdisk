@@ -36,7 +36,7 @@ static int run_receive_thread(void *data) {
   session = kmalloc(sizeof(session_t), GFP_KERNEL);
   session->socket_fd = client_socket;
   session->state = NETDISK_SESSION_STATE_INITIAL;
-  session->buffer = kmalloc(NETDISK_MAX_PACKET_SIZE, GFP_KERNEL);
+  session->buffer = kmalloc(sizeof(packet_header_t), GFP_KERNEL);
 
   bool running = true;
   ssize_t recvlen;
@@ -122,25 +122,8 @@ static int run_receive_thread(void *data) {
         if (recvlen == sizeof(packet_header_t)) {
           // Decrypt
           AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
-          header = (packet_header_t *)session->buffer;
-          // Check we have enough buffer
-          if (header->length > NETDISK_MAX_PACKET_SIZE) {
-            printk(KERN_ERR "netdisk: packet too large (%d bytes, limit %d)", header->length, NETDISK_MAX_PACKET_SIZE);
-            running = false;
-            break;
-          }
-          // If there's more data, receive it
-          if (header->length > 0) {
-            if (packet_recv(session->socket_fd, (uint8_t *)session->buffer + sizeof(packet_header_t), header->length, 10000) != header->length) {
-              printk(KERN_ALERT "netdisk: receive packet data timeout (%d bytes)", header->length);
-              running = false;
-              break;
-            }
-            // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t *)session->buffer + sizeof(packet_header_t), header->length);
-          }
           // Process the packet, stop if return true
-          if (process_packet(session, header, header->length == 0 ? NULL : (uint8_t *)session->buffer + sizeof(packet_header_t))) {
+          if (process_packet(session, (packet_header_t *)session->buffer, header->length == 0 ? NULL : (uint8_t *)session->buffer + sizeof(packet_header_t))) {
             running = false;
             break;
           }
@@ -188,7 +171,7 @@ bool process_packet(session_t *session, packet_header_t *header, uint8_t *data) 
 
   switch (header->operation) {
     case NETDISK_REPLY_OK:
-      netdisk_complete_chunk(header->transaction_id, header->block_id, data, header->length);
+      netdisk_complete_chunk(session, header);
       break;
     case NETDISK_REPLY_READ_ONLY:
     case NETDISK_REPLY_OUT_OF_RANGE:

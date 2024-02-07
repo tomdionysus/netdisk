@@ -82,27 +82,36 @@ static int netdisk_process_request(struct request *rq) {
     return ret;
 }
 
-void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t len) {
+void netdisk_complete_chunk(session_t *session, packet_header_t *header) {
   transaction_t *trans;
-  if ((trans = find_transaction(trans_id)) == NULL) {
+  if ((trans = find_transaction(header->transaction_id)) == NULL) {
     return;
   }
 
   chunk_t *chunk;
-  if ((chunk = find_chunk(trans, block_id)) == NULL) {
-    printk(KERN_ERR "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
+  if ((chunk = find_chunk(trans, header->block_id)) == NULL) {
+    printk(KERN_ERR "netdisk: chunk %llu not found (transaction %llu)", header->block_id, header->transaction_id);
     return;
   }
 
-  // Get the data from the chunk if this was a read.
-  if (rq_data_dir(trans->request) == READ) {
-    memcpy(chunk->buffer, data, chunk->size);
+  // If there's data, receive and decrypt.
+  if (rq_data_dir(trans->request) == READ && header->length > 0) {
+    if (packet_recv(session->socket_fd, chunk->buffer, header->length, 10000) != header->length) {
+      printk(KERN_ALERT "netdisk: receive packet data timeout (%d bytes)", header->length);
+      return;
+    }
+    // And Decrypt it
+    AES_CBC_decrypt_buffer(&session->rx_aes_context, chunk->buffer, header->length);
+
+    if(chunk->size != header->length) {
+      printk(KERN_ERR "netdisk: packet size mismatch %u != %u (transaction %llu, chunk %llu)", chunk->size, header->length, header->transaction_id, header->block_id);
+    }
   }
 
   // printk(KERN_NOTICE "netdisk: chunk %llu complete (transaction %llu, block %d of %d)", block_id, trans_id, trans->completed_chunks, trans->total_chunks);
 
   // Release the chunk
-  release_chunk(trans, block_id);
+  release_chunk(trans, header->block_id);
 
   // Report completed to request
   blk_update_request(trans->request, BLK_STS_OK, trans->completed_bytes);
@@ -115,7 +124,7 @@ void netdisk_complete_chunk(u64 trans_id, u64 block_id, uint8_t *data, size_t le
     blk_mq_end_request(trans->request, BLK_STS_OK);
 
     // Release the transaction
-    release_transaction(trans_id);
+    release_transaction(header->transaction_id);
   }
 }
 

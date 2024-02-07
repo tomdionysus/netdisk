@@ -137,7 +137,7 @@ ssize_t packet_send(struct socket *tcp_socket, uint8_t *buffer, size_t size) {
 }
 
 void send_chunk_request(struct socket *tcp_socket, struct AES_ctx *context, transaction_t *trans, chunk_t *chunk) {
-  packet_header_t *header = kmalloc(sizeof(packet_header_t) + chunk->size, GFP_KERNEL);
+  packet_header_t *header = kmalloc(sizeof(packet_header_t), GFP_KERNEL);
   void *data = (uint8_t *)header + sizeof(packet_header_t);
 
   if (rq_data_dir(trans->request) == WRITE) {
