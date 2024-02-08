@@ -28,7 +28,8 @@
 #define AES_KEYLEN 32
 
 typedef struct AES_ctx {
-  EVP_CIPHER_CTX* openssl_ctx;
+  EVP_CIPHER_CTX* rx_tfm;
+  EVP_CIPHER_CTX* tx_tfm;
 
   uint8_t key[AES_KEYLEN];
   uint8_t rx_iv[AES_BLOCKLEN];
