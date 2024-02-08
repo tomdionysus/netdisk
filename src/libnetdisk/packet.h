@@ -72,7 +72,7 @@ typedef struct session {
   int socket_fd;
   struct sockaddr_in remote_addr;
   uint8_t state;
-  struct AES_ctx aes_context;
+  AES_ctx_t* aes_context;
   uint64_t node_id;
   uint8_t* buffer;
 } session_t;

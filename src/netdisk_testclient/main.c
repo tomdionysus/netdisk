@@ -30,7 +30,7 @@ void* run_send_thread(void* arg) {
     }
 
     uint32_t olen = sizeof(packet_header_t) + header->length;
-        AES_CBC_encrypt_buffer(&session->aes_context, (uint8_t*)header, (uint8_t*)header, olen);
+        AES_CBC_encrypt_buffer(session->aes_context, (uint8_t*)header, (uint8_t*)header, olen);
 
         // Send Command
         ssize_t bytes_sent = packet_send(session->socket_fd, (uint8_t*)header,olen);
@@ -94,6 +94,9 @@ int main(int argc, char* argv[]) {
   session->state = NETDISK_SESSION_STATE_INITIAL;
   log_debug("Client is NETDISK_SESSION_STATE_INITIAL");
 
+  // Create the AES Context
+  session->aes_context = AES_CBC_alloc(config.key);
+
   session->buffer = malloc(NETDISK_MAX_PACKET_SIZE);
 
   ssize_t bytes_sent;
@@ -104,7 +107,7 @@ int main(int argc, char* argv[]) {
         // Initial state.
         random_get(session->buffer, NETDISK_KEY_SIZE);
         // Setup TX AES Context
-        AES_CBC_set_tx_iv(&session->aes_context, session->buffer);
+        AES_CBC_set_tx_iv(session->aes_context, session->buffer);
         // Send IV
          bytes_sent = packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
           if (bytes_sent < NETDISK_KEY_SIZE) {
@@ -121,14 +124,14 @@ int main(int argc, char* argv[]) {
         recvlen = packet_recv(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 5000);
         if (recvlen == NETDISK_KEY_SIZE) {
           // Setup RX AES Context
-          AES_CBC_set_rx_iv(&session->aes_context, session->buffer);
+          AES_CBC_set_rx_iv(session->aes_context, session->buffer);
           // Init Handshake, Create NodeID
           packet = (packet_handshake_t*)session->buffer;
           packet_handshake_init(packet);
           // Create a random node ID
           random_get((uint8_t*)&packet->node_id, sizeof(packet->node_id));
           // Encrypt
-          AES_CBC_encrypt_buffer(&session->aes_context, session->buffer, session->buffer, sizeof(packet_handshake_t));
+          AES_CBC_encrypt_buffer(session->aes_context, session->buffer, session->buffer, sizeof(packet_handshake_t));
           // Send Handshake
           bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
@@ -160,7 +163,7 @@ int main(int argc, char* argv[]) {
         recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 5000);
         if (recvlen == sizeof(packet_handshake_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, session->buffer, recvlen);
+          AES_CBC_decrypt_buffer(session->aes_context, session->buffer, session->buffer, recvlen);
           // Check Magic number
           packet = (packet_handshake_t*)session->buffer;
           if (!packet_magic_check(packet)) {
@@ -191,7 +194,7 @@ int main(int argc, char* argv[]) {
         recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 1000);
         if (recvlen > 0) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, session->buffer, recvlen);
+          AES_CBC_decrypt_buffer(session->aes_context, session->buffer, session->buffer, recvlen);
           header = (packet_header_t*)session->buffer;
 
           // Check we have enough buffer
@@ -208,7 +211,7 @@ int main(int argc, char* argv[]) {
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(session->aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
           }
           // Process the packet, stop if return true
           if (process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t))) {
@@ -235,7 +238,11 @@ int main(int argc, char* argv[]) {
   log_debug("Close socket...");
   packet_destroy_socket(session->socket_fd);
   
+  // Free session buffer
   free(session->buffer);
+
+  // Release AES Context
+  AES_CBC_release(session->aes_context);
 
   // Close the random source
   log_debug("Close RNG...");
