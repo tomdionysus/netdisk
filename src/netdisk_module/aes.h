@@ -35,8 +35,8 @@ typedef struct AES_ctx {
 AES_ctx_t* AES_CBC_alloc(const uint8_t* key);
 void AES_CBC_set_tx_iv(AES_ctx_t* ctx, const uint8_t* iv);
 void AES_CBC_set_rx_iv(AES_ctx_t* ctx, const uint8_t* iv);
-void AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length);
-void AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length);
+bool AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length);
+bool AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length);
 void AES_CBC_release(AES_ctx_t* ctx);
 
 #endif

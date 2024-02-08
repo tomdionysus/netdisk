@@ -55,7 +55,7 @@ void AES_CBC_set_rx_iv(AES_ctx_t* ctx, const uint8_t* iv) { memcpy(ctx->rx_iv, i
 
 static void __crypto_req_done(void* req, int err) {}
 
-void AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length) {
+bool AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length) {
   DECLARE_CRYPTO_WAIT(wait);
 
   struct scatterlist sg_in;
@@ -67,6 +67,7 @@ void AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t 
   struct skcipher_request* req = skcipher_request_alloc(ctx->tx_tfm, GFP_KERNEL);
   if (!req) {
     pr_err("skcipher_request_alloc error\n");
+    return false;
   }
 
   skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP, __crypto_req_done, &wait);
@@ -76,14 +77,17 @@ void AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t 
   int err = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
   if (err) {
     pr_err("Error encrypting data: %d\n", err);
+    return false;
   } else {
     memcpy(ctx->tx_iv, out + (uint32_t)(length - AES_BLOCKLEN), AES_BLOCKLEN);
   }
 
   skcipher_request_free(req);
+
+  return true;
 }
 
-void AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length) {
+bool AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length) {
   DECLARE_CRYPTO_WAIT(wait);
 
   uint8_t next_iv[AES_BLOCKLEN];
@@ -98,6 +102,7 @@ void AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t 
   struct skcipher_request* req = skcipher_request_alloc(ctx->tx_tfm, GFP_KERNEL);
   if (!req) {
     pr_err("skcipher_request_alloc error:\n");
+    return false;
   }
 
   skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP, __crypto_req_done, &wait);
@@ -107,11 +112,14 @@ void AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t 
   int err = crypto_wait_req(crypto_skcipher_decrypt(req), &wait);
   if (err) {
     pr_err("Error decrypting data: %d\n", err);
+    return false;
   } else {
     memcpy(ctx->rx_iv, next_iv, AES_BLOCKLEN);
   }
 
   skcipher_request_free(req);
+
+  return true;
 }
 
 void AES_CBC_release(AES_ctx_t* ctx) {

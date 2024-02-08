@@ -5,6 +5,7 @@
 // Licensed under the MIT License (see LICENSE in root of project)
 //
 #include "main.h"
+#include "aes.h"
 
 netdiskd_config_t config;
 
@@ -173,7 +174,7 @@ void* handle_connection(void* arg) {
         // Initial state.
         random_get(session->buffer, NETDISK_KEY_SIZE);
         // Setup TX AES Context
-        AES_init_ctx_iv(&session->tx_aes_context, config.key, session->buffer);
+        AES_CBC_set_tx_iv(&session->aes_context, session->buffer);
         // Send IV
         packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
         // Set State
@@ -185,13 +186,13 @@ void* handle_connection(void* arg) {
         recvlen = packet_recv(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 5000);
         if (recvlen == NETDISK_KEY_SIZE) {
           // Setup RX AES Context
-          AES_init_ctx_iv(&session->rx_aes_context, config.key, session->buffer);
+          AES_CBC_set_rx_iv(&session->aes_context, session->buffer);
           // Init Handshake, Create NodeID
           packet = (packet_handshake_t*)session->buffer;
           packet_handshake_init(packet);
           random_get((uint8_t*)&packet->node_id, sizeof(packet->node_id));
           // Encrypt
-          AES_CBC_encrypt_buffer(&session->tx_aes_context, session->buffer, sizeof(packet_handshake_t));
+          AES_CBC_encrypt_buffer(&session->aes_context, session->buffer, session->buffer, sizeof(packet_handshake_t));
           // Send Handshake
           ssize_t bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
@@ -215,7 +216,7 @@ void* handle_connection(void* arg) {
         recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 5000);
         if (recvlen == sizeof(packet_handshake_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
+          AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, session->buffer, recvlen);
           packet = (packet_handshake_t*)session->buffer;
           // Check Magic number
           if (!packet_magic_check(packet)) {
@@ -247,7 +248,7 @@ void* handle_connection(void* arg) {
         recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 1000);
         if (recvlen > 0) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, sizeof(packet_header_t));
+          AES_CBC_decrypt_buffer(&session->aes_context, session->buffer, session->buffer, sizeof(packet_header_t));
           header = (packet_header_t*)session->buffer;
           // Check we have enough buffer
           if (header->length > NETDISK_MAX_PACKET_SIZE) {
@@ -263,7 +264,7 @@ void* handle_connection(void* arg) {
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(&session->aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
           }
 
           // Process the packet
@@ -357,7 +358,7 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
 
   // Encrypt
   uint32_t olen = sizeof(packet_header_t) + reply->length;
-  AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)reply, olen);
+  AES_CBC_encrypt_buffer(&session->aes_context, (uint8_t*)reply, (uint8_t*)reply, olen);
 
   // Send
   ssize_t sendlen = packet_send(session->socket_fd, (uint8_t*)reply, olen);
