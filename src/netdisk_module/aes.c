@@ -87,7 +87,7 @@ void AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t 
   DECLARE_CRYPTO_WAIT(wait);
 
   uint8_t next_iv[AES_BLOCKLEN];
-  memcpy(next_iv, out + length - AES_BLOCKLEN, AES_BLOCKLEN);
+  memcpy(next_iv, in + length - AES_BLOCKLEN, AES_BLOCKLEN);
 
   struct scatterlist sg_in;
   struct scatterlist sg_out;

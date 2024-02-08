@@ -118,4 +118,4 @@ netdisk is working ALPHA software.
 
 ## Dependencies
 
-* [tiny-AES-c](deps/tiny-AES-c) - [Github](https://github.com/kokke/tiny-AES-c) 
+* [OpenSSL](https://github.com/openssl/openssl) v3.0.0

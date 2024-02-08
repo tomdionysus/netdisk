@@ -60,7 +60,7 @@
 #include <time.h>
 
 #include "random.h"
-#include "tiny-AES-c/aes.h"
+#include "aes.h"
 
 extern const uint8_t NETDISK_MAGIC_NUMBER[];
 #define NETDISK_MAGIC_NUMBER_LENGTH 4

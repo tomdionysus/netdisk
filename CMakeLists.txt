@@ -17,7 +17,9 @@ file(GLOB netdisk_testclient_SOURCES ${CMAKE_SOURCE_DIR}/src/netdisk_testclient/
 
 # Dependencies
 find_package(Threads REQUIRED)
-include(${CMAKE_SOURCE_DIR}/deps/tiny-AES-c/CMakeLists.txt)
+find_package(OpenSSL REQUIRED)
+
+include_directories(${OPENSSL_INCLUDE_DIR})
 
 # libnetdisk
 add_library(
@@ -29,7 +31,8 @@ install(TARGETS netdisk LIBRARY DESTINATION lib)
 
 target_link_libraries(
 	netdisk 
-	tiny-aes
+	OpenSSL::Crypto
+	Threads::Threads
 )
 
 # Server
