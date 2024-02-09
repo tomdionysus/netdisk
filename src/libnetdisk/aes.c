@@ -73,7 +73,7 @@ bool AES_CBC_decrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t 
     }
 
     // Set the original last encrypted block as new IV
-    memcpy(&ctx->tx_iv, last_cyphertext, AES_BLOCKLEN);
+    memcpy(&ctx->rx_iv, last_cyphertext, AES_BLOCKLEN);
 
     return true;
 }
