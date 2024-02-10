@@ -1,0 +1,4 @@
+#!/bin/sh
+clang-format src/netdiskd/*.h src/netdiskd/*.c -i
+clang-format src/libnetdisk/*.h src/libnetdisk/*.c -i
+clang-format src/netdisk_module/*.h src/netdisk_module/*.c -i

@@ -1,0 +1,3 @@
+[submodule "deps/red-black-tree"]
+	path = deps/red-black-tree
+	url = https://github.com/tomdionysus/red-black-tree.git
