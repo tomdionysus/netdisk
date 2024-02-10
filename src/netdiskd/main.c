@@ -84,15 +84,11 @@ int main(int argc, char* argv[]) {
   int addrlen = sizeof(struct sockaddr_in);
   fd_set readfds;
   int max_sd;
+  int socket_fd;
 
   session_t* new_session = NULL;
 
   while (running) {
-    // Initialise new session (waiting)
-    if (new_session == NULL) {
-      new_session = (session_t*)calloc(sizeof(session_t), 1);
-    }
-
     // Clear the socket set
     FD_ZERO(&readfds);
 
@@ -118,20 +114,19 @@ int main(int argc, char* argv[]) {
 
     // Check if it was for the server socket, meaning an incoming connection
     if (FD_ISSET(server_socket_fd, &readfds)) {
-      if ((new_session->socket_fd = accept(server_socket_fd, (struct sockaddr*)&(new_session->remote_addr), (socklen_t*)&addrlen)) < 0) {
+      if ((socket_fd = accept(server_socket_fd, (struct sockaddr*)&(new_session->remote_addr), (socklen_t*)&addrlen)) < 0) {
         log_error("Accept Error");
+        continue;
       }
 
-      if (pthread_create(&new_session->thread_id, NULL, handle_connection, new_session) != 0) {
-        log_error("Cannot create handler thread");
+      new_session = session_create(socket_fd, handle_connection);
+      if (!new_session) {
+        log_error("Cannot create session");
       } else {
         new_session = NULL;
       }
     }
   }
-
-  // Free the waiting session info
-  if (new_session != NULL) free(new_session);
 
   // Close the socket
   log_debug("Close socket...");
@@ -157,9 +152,6 @@ void* handle_connection(void* arg) {
   // Cache the address and port
   char address_port[32];
   sprintf(address_port, "%s:%d", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
-
-  // Allocate session buffer.
-  session->buffer = malloc(NETDISK_MAX_PACKET_SIZE);
 
   ssize_t recvlen;
   packet_handshake_t* packet;
@@ -283,11 +275,8 @@ void* handle_connection(void* arg) {
   close(session->socket_fd);
   log_info("(%s) Disconnected", address_port);
 
-  // Free Session Buffer
-  free(session->buffer);
-
   // Free Session
-  free(session);
+  session_release(session);
 
   return NULL;
 }

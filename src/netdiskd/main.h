@@ -9,7 +9,6 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -24,6 +23,7 @@
 #include "main.h"
 #include "packet.h"
 #include "random.h"
+#include "session.h"
 
 void signal_stop(int signum);
 void* handle_connection(void* arg);

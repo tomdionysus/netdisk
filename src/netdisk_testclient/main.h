@@ -24,6 +24,7 @@
 #include "main.h"
 #include "packet.h"
 #include "random.h"
+#include "session.h"
 
 #define AES256 1
 #include "tiny-AES-c/aes.h"

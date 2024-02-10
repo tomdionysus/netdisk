@@ -60,23 +60,11 @@
 #include <time.h>
 
 #include "random.h"
-#include "tiny-AES-c/aes.h"
 
 extern const uint8_t NETDISK_MAGIC_NUMBER[];
 #define NETDISK_MAGIC_NUMBER_LENGTH 4
 
 #pragma pack(push, 1)
-
-typedef struct session {
-  pthread_t thread_id;
-  int socket_fd;
-  struct sockaddr_in remote_addr;
-  uint8_t state;
-  struct AES_ctx rx_aes_context;
-  struct AES_ctx tx_aes_context;
-  uint64_t node_id;
-  uint8_t* buffer;
-} session_t;
 
 // Should be exactly 16 bytes long.
 typedef struct packet_handshake {
