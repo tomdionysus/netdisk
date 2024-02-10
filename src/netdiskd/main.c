@@ -150,15 +150,11 @@ void* handle_connection(void* arg) {
   session_t* session = (session_t*)arg;
   bool thread_running = true;
 
-  // Cache the address and port
-  char address_port[32];
-  sprintf(address_port, "%s:%d", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
-
   ssize_t recvlen;
   packet_handshake_t* packet;
   packet_header_t* header;
 
-  log_info("(%s) Connected", address_port);
+  log_info("(%s) Connected", session->remote_addr_str);
 
   while (running && thread_running) {
     switch (session->state) {
@@ -171,7 +167,7 @@ void* handle_connection(void* arg) {
         packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
         // Set State
         session->state = NETDISK_SESSION_STATE_IV;
-        log_debug("(%s) NETDISK_SESSION_STATE_IV", address_port);
+        log_debug("(%s) NETDISK_SESSION_STATE_IV", session->remote_addr_str);
         break;
       case NETDISK_SESSION_STATE_IV:
         // Wait for other side of IV
@@ -189,17 +185,17 @@ void* handle_connection(void* arg) {
           ssize_t bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
             // Handle the error case
-            log_error("(%s) Send failed", address_port);
+            log_error("(%s) Send failed", session->remote_addr_str);
             thread_running = false;
           }
           // Set State
           session->state = NETDISK_SESSION_STATE_HANDSHAKE;
-          log_debug("(%s) NETDISK_SESSION_STATE_HANDSHAKE", address_port);
+          log_debug("(%s) NETDISK_SESSION_STATE_HANDSHAKE", session->remote_addr_str);
         } else if (recvlen == -999) {
-          log_warn("(%s) Timeout", address_port);
+          log_warn("(%s) Timeout", session->remote_addr_str);
           thread_running = false;
         } else {
-          log_warn("(%s) Error", address_port);
+          log_warn("(%s) Error", session->remote_addr_str);
           thread_running = false;
         }
         break;
@@ -212,26 +208,26 @@ void* handle_connection(void* arg) {
           packet = (packet_handshake_t*)session->buffer;
           // Check Magic number
           if (!packet_magic_check(packet)) {
-            log_warn("(%s) Bad magic number", address_port);
+            log_warn("(%s) Bad magic number", session->remote_addr_str);
             thread_running = false;
             break;
           }
           // Check Version
           if (!packet_version_check(packet, false)) {
-            log_warn("(%s) Incompatible version", address_port);
+            log_warn("(%s) Incompatible version", session->remote_addr_str);
             thread_running = false;
             break;
           }
           // Get NodeID
           session->node_id = packet->node_id;
           // Set state ready
-          log_debug("(%s) NETDISK_SESSION_STATE_READY", address_port);
+          log_debug("(%s) NETDISK_SESSION_STATE_READY", session->remote_addr_str);
           session->state = NETDISK_SESSION_STATE_READY;
         } else if (recvlen == -999) {
-          log_warn("(%s) Timeout", address_port);
+          log_warn("(%s) Timeout", session->remote_addr_str);
           thread_running = false;
         } else {
-          log_warn("(%s) Unknown Error", address_port);
+          log_warn("(%s) Unknown Error", session->remote_addr_str);
           thread_running = false;
         }
         break;
@@ -244,14 +240,14 @@ void* handle_connection(void* arg) {
           header = (packet_header_t*)session->buffer;
           // Check we have enough buffer
           if (header->length > NETDISK_MAX_PACKET_SIZE) {
-            log_warn("(%s) Packet too large (%d bytes, limit %d)", address_port, header->length, NETDISK_MAX_PACKET_SIZE);
+            log_warn("(%s) Packet too large (%d bytes, limit %d)", session->remote_addr_str, header->length, NETDISK_MAX_PACKET_SIZE);
             thread_running = false;
             break;
           }
           // If there's more data, receive it
           if (header->length > 0) {
             if (packet_recv(session->socket_fd, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length, 1000) != header->length) {
-              log_warn("(%s) Timeout Packet data (%d bytes)", address_port, header->length);
+              log_warn("(%s) Timeout Packet data (%d bytes)", session->remote_addr_str, header->length);
               thread_running = false;
               break;
             }
@@ -260,16 +256,16 @@ void* handle_connection(void* arg) {
           }
 
           // Process the packet
-          process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t), address_port);
+          process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t));
 
         } else if (recvlen == -999) {
           // Do Nothing, timeout in normal operation
         } else if (recvlen == 0) {
           // Connection terminated
           thread_running = false;
-          log_info("(%s) Remotely Closed", address_port);
+          log_info("(%s) Remotely Closed", session->remote_addr_str);
         } else {
-          log_warn("(%s) Unknown Error %d", address_port, recvlen);
+          log_warn("(%s) Unknown Error %d", session->remote_addr_str, recvlen);
           thread_running = false;
         }
         break;
@@ -278,7 +274,7 @@ void* handle_connection(void* arg) {
 
   // Close socket
   close(session->socket_fd);
-  log_info("(%s) Disconnected", address_port);
+  log_info("(%s) Disconnected", session->remote_addr_str);
 
   // Free Session
   session_release(session);
@@ -286,7 +282,7 @@ void* handle_connection(void* arg) {
   return NULL;
 }
 
-bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, char* address_port) {
+bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) {
   // Alloc Buffer
   packet_header_t* reply = (packet_header_t*)malloc(NETDISK_MAX_PACKET_SIZE);
 
@@ -300,24 +296,24 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
 
   switch (header->operation) {
     case NETDISK_COMMAND_INFO:
-      log_debug("(%s) NETDISK_COMMAND_INFO", address_port);
+      log_debug("(%s) NETDISK_COMMAND_INFO", session->remote_addr_str);
       reply->operation = NETDISK_REPLY_INFO;
       break;
     case NETDISK_COMMAND_READ:
       if (config.max_blocks != 0 && header->block_id > config.max_blocks) {
-        log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
+        log_error("(%s) NETDISK_COMMAND_READ Out of range (%d > %d)", session->remote_addr_str, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
       } else if ((iolen = fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET)) != 0) {
-        log_error("(%s) NETDISK_COMMAND_READ Seek Error %d (pos %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT);
+        log_error("(%s) NETDISK_COMMAND_READ Seek Error %d (pos %lu)", session->remote_addr_str, iolen, header->block_id << NETDISK_BLOCK_SHIFT);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
       } else {
         iolen = fread((uint8_t*)reply + sizeof(packet_header_t), header->block_length, 1, disk_fd);
         if (ferror(disk_fd)) {
-          log_error("(%s) NETDISK_COMMAND_READ File Error %s (pos %lu, length %lu)", address_port, iolen, iolen, header->block_id << NETDISK_BLOCK_SHIFT,
-                    header->block_length);
+          log_error("(%s) NETDISK_COMMAND_READ File Error %s (pos %lu, length %lu)", session->remote_addr_str, iolen, iolen,
+                    header->block_id << NETDISK_BLOCK_SHIFT, header->block_length);
           reply->operation = NETDISK_REPLY_ERROR;
         } else {
-          log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", address_port, header->block_id, header->block_length);
+          log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", session->remote_addr_str, header->block_id, header->block_length);
           reply->operation = NETDISK_REPLY_OK;
           reply->length = header->block_length;
         }
@@ -327,25 +323,25 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
       if (config.read_only) {
         reply->operation = NETDISK_REPLY_READ_ONLY;
       } else if (config.max_blocks != 0 && header->block_id > config.max_blocks) {
-        log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", address_port, header->block_id, config.max_blocks);
+        log_error("(%s) NETDISK_COMMAND_WRITE Out of range (%d > %d)", session->remote_addr_str, header->block_id, config.max_blocks);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
       } else if (fseek(disk_fd, header->block_id << NETDISK_BLOCK_SHIFT, SEEK_SET) != 0) {
-        log_error("(%s) NETDISK_COMMAND_WRITE Seek Error %d (pos %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT);
+        log_error("(%s) NETDISK_COMMAND_WRITE Seek Error %d (pos %lu)", session->remote_addr_str, iolen, header->block_id << NETDISK_BLOCK_SHIFT);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
       } else {
         iolen = fwrite(data, header->block_length, 1, disk_fd);
         if (ferror(disk_fd)) {
-          log_error("(%s) NETDISK_COMMAND_WRITE File Error %d (pos %lu, length %lu)", address_port, iolen, header->block_id << NETDISK_BLOCK_SHIFT,
+          log_error("(%s) NETDISK_COMMAND_WRITE File Error %d (pos %lu, length %lu)", session->remote_addr_str, iolen, header->block_id << NETDISK_BLOCK_SHIFT,
                     header->block_length);
           reply->operation = NETDISK_REPLY_ERROR;
         } else {
-          log_debug("(%s) NETDISK_COMMAND_WRITE Complete, Block %d Length %d", address_port, header->block_id, header->block_length);
+          log_debug("(%s) NETDISK_COMMAND_WRITE Complete, Block %d Length %d", session->remote_addr_str, header->block_id, header->block_length);
           reply->operation = NETDISK_REPLY_OK;
         }
       }
       break;
     default:
-      log_warn("(%s) Unknown operation %d", address_port, header->operation);
+      log_warn("(%s) Unknown operation %d", session->remote_addr_str, header->operation);
       reply->operation = NETDISK_REPLY_UNKNOWN_COMMAND;
   }
 
@@ -356,7 +352,7 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data, 
   // Send
   ssize_t sendlen = packet_send(session->socket_fd, (uint8_t*)reply, olen);
   if (sendlen != olen) {
-    log_warn("(%s) Sending Failed %d", address_port, sendlen);
+    log_warn("(%s) Sending Failed %d", session->remote_addr_str, sendlen);
   };
 
   // Free Buffer

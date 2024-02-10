@@ -19,6 +19,7 @@ typedef struct session {
   pthread_t thread_id;
   int socket_fd;
   struct sockaddr_in remote_addr;
+  char remote_addr_str[32];
   uint8_t state;
   struct AES_ctx rx_aes_context;
   struct AES_ctx tx_aes_context;

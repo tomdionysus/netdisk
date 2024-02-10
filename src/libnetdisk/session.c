@@ -1,6 +1,7 @@
 #include "session.h"
 
 #include <memory.h>
+#include <stdio.h>
 
 session_t *session_create(int socket_fd, struct sockaddr_in remote_addr, void *(handler)(void *arg)) {
   session_t *session = malloc(sizeof(session_t));
@@ -12,6 +13,7 @@ session_t *session_create(int socket_fd, struct sockaddr_in remote_addr, void *(
   session->socket_fd = socket_fd;
   session->state = NETDISK_SESSION_STATE_INITIAL;
   session->remote_addr = remote_addr;
+  sprintf(session->remote_addr_str, "%s:%d", inet_ntoa(session->remote_addr.sin_addr), ntohs(session->remote_addr.sin_port));
 
   if (pthread_create(&session->thread_id, NULL, handler, session) != 0) {
     session_release(session);
