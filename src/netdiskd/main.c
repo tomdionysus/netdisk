@@ -85,6 +85,7 @@ int main(int argc, char* argv[]) {
   fd_set readfds;
   int max_sd;
   int socket_fd;
+  struct sockaddr_in remote_addr;
 
   session_t* new_session = NULL;
 
@@ -114,12 +115,12 @@ int main(int argc, char* argv[]) {
 
     // Check if it was for the server socket, meaning an incoming connection
     if (FD_ISSET(server_socket_fd, &readfds)) {
-      if ((socket_fd = accept(server_socket_fd, (struct sockaddr*)&(new_session->remote_addr), (socklen_t*)&addrlen)) < 0) {
-        log_error("Accept Error");
+      if ((socket_fd = accept(server_socket_fd, (struct sockaddr*)&(remote_addr), (socklen_t*)&addrlen)) < 0) {
+        log_error("Accept Error %d");
         continue;
       }
 
-      new_session = session_create(socket_fd, handle_connection);
+      new_session = session_create(socket_fd, remote_addr, handle_connection);
       if (!new_session) {
         log_error("Cannot create session");
       } else {
@@ -262,9 +263,13 @@ void* handle_connection(void* arg) {
           process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t), address_port);
 
         } else if (recvlen == -999) {
-          // Do Nothing
+          // Do Nothing, timeout in normal operation
+        } else if (recvlen == 0) {
+          // Connection terminated
+          thread_running = false;
+          log_info("(%s) Remotely Closed", address_port);
         } else {
-          log_warn("(%s) Unknown Error", address_port);
+          log_warn("(%s) Unknown Error %d", address_port, recvlen);
           thread_running = false;
         }
         break;

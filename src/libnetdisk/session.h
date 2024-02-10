@@ -11,8 +11,8 @@
 #include <netinet/tcp.h>
 #include <pthread.h>
 
-#include "random.h"
 #include "packet.h"
+#include "random.h"
 #include "tiny-AES-c/aes.h"
 
 typedef struct session {
@@ -26,7 +26,7 @@ typedef struct session {
   uint8_t* buffer;
 } session_t;
 
-session_t* session_create(int socket_fd, void*(handler)(void* arg));
+session_t* session_create(int socket_fd, struct sockaddr_in remote_addr, void*(handler)(void* arg));
 void session_release(session_t* session);
 
 #endif

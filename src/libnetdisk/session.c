@@ -2,12 +2,16 @@
 
 #include <memory.h>
 
-session_t *session_create(int socket_fd, void *(handler)(void *arg)) {
+session_t *session_create(int socket_fd, struct sockaddr_in remote_addr, void *(handler)(void *arg)) {
   session_t *session = malloc(sizeof(session_t));
+  if (!session) {
+    return NULL;
+  }
   memset(session, 0, sizeof(session_t));
 
   session->socket_fd = socket_fd;
   session->state = NETDISK_SESSION_STATE_INITIAL;
+  session->remote_addr = remote_addr;
 
   if (pthread_create(&session->thread_id, NULL, handler, session) != 0) {
     session_release(session);
