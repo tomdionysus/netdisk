@@ -11,7 +11,7 @@
 #include <netinet/tcp.h>
 #include <pthread.h>
 
-#include "packet.h"
+#include "shared/packet.h"
 #include "random.h"
 #include "tiny-AES-c/aes.h"
 

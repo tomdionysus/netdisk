@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "packet.h"
+#include "shared/packet.h"
 
 // Define the node structure for queue
 typedef struct packet_queue_node {

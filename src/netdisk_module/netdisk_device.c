@@ -1,7 +1,7 @@
 #include "netdisk_device.h"
 
 #include "module.h"
-#include "packet.h"
+#include "packet_kernel.h"
 #include "send_thread.h"
 #include "transaction.h"
 

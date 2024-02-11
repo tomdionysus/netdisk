@@ -3,21 +3,19 @@ CONFIG_MODULE_SIG=n
 BINARY      := netdisk
 KERNEL      := /lib/modules/$(shell uname -r)/build
 ARCH        := $(shell uname -m)
-C_FLAGS     := -Wall
+EXTRA_CFLAGS := -I$(PWD)/../ -Wall -DIS_KERNEL=1
 KMOD_DIR    := $(shell pwd)
 TARGET_PATH := /lib/modules/$(shell uname -r)/kernel/drivers/char
 
-ccflags-y += $(C_FLAGS)
-
 # Specify the object files for the module
 obj-m := $(BINARY).o
-$(BINARY)-objs := module.o util.o transaction.o send_thread.o receive_thread.o aes.o packet.o netdisk_device.o
+$(BINARY)-objs := ../shared/packet.o module.o util.o transaction.o send_thread.o receive_thread.o aes.o packet_kernel.o netdisk_device.o
 
 all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+	make -C $(KERNEL) M=$(PWD) modules
 
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	make -C $(KERNEL) M=$(PWD) clean
 
 install:
 	cp $(BINARY).ko $(TARGET_PATH)

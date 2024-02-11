@@ -28,7 +28,7 @@
 #include <linux/slab.h>
 #include <linux/wait.h>
 
-#include "packet.h"
+#include "packet_kernel.h"
 #include "transaction.h"
 
 typedef struct chunk_request {

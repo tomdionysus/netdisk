@@ -36,7 +36,7 @@
 #include <linux/vmalloc.h>
 #include <net/sock.h>
 
-#include "packet.h"
+#include "packet_kernel.h"
 
 #define TOTAL_SECTORS (100 * 1024 * 1024 / 512)
 

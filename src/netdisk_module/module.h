@@ -28,7 +28,7 @@
 #include <linux/socket.h>
 #include <net/sock.h>
 
-#include "packet.h"
+#include "packet_kernel.h"
 
 typedef struct netdisk_config {
   // Parameters

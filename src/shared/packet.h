@@ -4,8 +4,19 @@
 // Copyright (C) Tom Cully 2024
 // Licensed under the MIT License (see LICENSE in root of project)
 //
-#ifndef NETDISK_PROTOCOL
-#define NETDISK_PROTOCOL
+#ifndef NETDISK_PACKET
+#define NETDISK_PACKET
+
+#if IS_KERNEL
+#include <linux/types.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#else
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <memory.h>
+#endif
 
 #define NETDISK_DEFAULT_PORT 26547
 
@@ -50,17 +61,6 @@
 #define NETDISK_PACKET_SOCKET_LISTEN_FAILED 3
 #define NETDISK_PACKET_SOCKET_CONNECT_FAILED 4
 
-#include <arpa/inet.h>
-#include <errno.h>
-#include <memory.h>
-#include <netinet/tcp.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <sys/time.h>
-#include <time.h>
-
-#include "random.h"
-
 extern const uint8_t NETDISK_MAGIC_NUMBER[];
 #define NETDISK_MAGIC_NUMBER_LENGTH 4
 
@@ -69,7 +69,7 @@ extern const uint8_t NETDISK_MAGIC_NUMBER[];
 // Should be exactly 16 bytes long.
 typedef struct packet_handshake {
   uint8_t magic[4];
-  struct {
+  struct {    
     uint8_t major;
     uint8_t minor;
     uint8_t patch;
@@ -91,15 +91,10 @@ typedef struct packet_header {
 
 #pragma pack(pop)
 
-int packet_create_server_socket(int* socket_fd, struct sockaddr_in* addr);
-int packet_create_client_socket(int* socket_fd, struct sockaddr_in* addr);
-int packet_destroy_socket(int socket_id);
-
-ssize_t packet_send(int socket_fd, const uint8_t* buffer, size_t size);
-ssize_t packet_recv(int socket_fd, uint8_t* buffer, size_t size, int timeout_ms);
-
 void packet_handshake_init(packet_handshake_t* packet);
 bool packet_magic_check(packet_handshake_t* packet);
 bool packet_version_check(packet_handshake_t* packet, bool strict);
+
+const char* packet_operation_to_str(uint16_t command);
 
 #endif

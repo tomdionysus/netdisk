@@ -8,8 +8,10 @@ project(netdisk C ASM)
 include_directories (
 	${CMAKE_SOURCE_DIR}/src/libnetdisk
 	${CMAKE_SOURCE_DIR}/deps
+	${CMAKE_SOURCE_DIR}/src
 )
 
+file(GLOB shared_SOURCES ${CMAKE_SOURCE_DIR}/src/shared/*.c)
 file(GLOB libnetdisk_SOURCES ${CMAKE_SOURCE_DIR}/src/libnetdisk/*.c)
 file(GLOB netdisk_mod_SOURCES ${CMAKE_SOURCE_DIR}/src/netdisk_module/*.c)
 file(GLOB netdiskd_SOURCES ${CMAKE_SOURCE_DIR}/src/netdiskd/*.c)
@@ -22,6 +24,7 @@ include(${CMAKE_SOURCE_DIR}/deps/tiny-AES-c/CMakeLists.txt)
 # libnetdisk
 add_library(
 	netdisk SHARED 
+	${shared_SOURCES}
 	${libnetdisk_SOURCES}
 )
 

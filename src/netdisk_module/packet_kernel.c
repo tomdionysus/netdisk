@@ -16,9 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
-#include "packet.h"
-
-const u8 NETDISK_MAGIC_NUMBER[] = {0x4E, 0x54, 0x44, 0x53, 0x4B};
+#include "packet_kernel.h"
 
 int packet_create_client_socket(struct socket **tcp_socket, struct sockaddr_in *addr) {
   int ret;
@@ -47,25 +45,6 @@ int packet_destroy_socket(struct socket *tcp_socket) {
     tcp_socket = NULL;
   }
   return 0;
-}
-
-void packet_handshake_init(packet_handshake_t *packet) {
-  memset(packet, 0, sizeof(packet_handshake_t));
-
-  // Initialize magic array
-  memcpy(packet->magic, NETDISK_MAGIC_NUMBER, NETDISK_MAGIC_NUMBER_LENGTH);
-
-  // Initialize version
-  packet->version.major = NETDISK_VERSION_MAJOR;
-  packet->version.minor = NETDISK_VERSION_MINOR;
-  packet->version.patch = NETDISK_VERSION_PATCH;
-}
-
-bool packet_magic_check(packet_handshake_t *packet) { return memcmp(packet->magic, NETDISK_MAGIC_NUMBER, NETDISK_MAGIC_NUMBER_LENGTH) == 0; }
-
-bool packet_version_check(packet_handshake_t *packet, bool strict) {
-  return packet->version.major == NETDISK_VERSION_MAJOR && packet->version.minor == NETDISK_VERSION_MINOR &&
-         (!strict || packet->version.patch == NETDISK_VERSION_PATCH);
 }
 
 ssize_t packet_recv(struct socket *tcp_socket, uint8_t *buffer, size_t size, int timeout_ms) {
@@ -134,36 +113,4 @@ ssize_t packet_send(struct socket *tcp_socket, uint8_t *buffer, size_t size) {
   }
 
   return total_sent;
-}
-
-const char *packet_command_to_str(u16 command) {
-  switch (command) {
-    case NETDISK_COMMAND_INFO:
-      return "NETDISK_COMMAND_INFO";
-    case NETDISK_COMMAND_READ:
-      return "NETDISK_COMMAND_READ";
-    case NETDISK_COMMAND_WRITE:
-      return "NETDISK_COMMAND_WRITE";
-    default:
-      return "Unknown Command";
-  }
-}
-
-const char *packet_reply_to_str(u16 reply) {
-  switch (reply) {
-    case NETDISK_REPLY_OK:
-      return "NETDISK_REPLY_OK";
-    case NETDISK_REPLY_INFO:
-      return "NETDISK_REPLY_INFO";
-    case NETDISK_REPLY_READ_ONLY:
-      return "NETDISK_REPLY_READ_ONLY";
-    case NETDISK_REPLY_OUT_OF_RANGE:
-      return "NETDISK_REPLY_OUT_OF_RANGE";
-    case NETDISK_REPLY_UNKNOWN_COMMAND:
-      return "NETDISK_REPLY_UNKNOWN_COMMAND";
-    case NETDISK_REPLY_ERROR:
-      return "NETDISK_REPLY_ERROR";
-    default:
-      return "Unknown Reply";
-  }
 }

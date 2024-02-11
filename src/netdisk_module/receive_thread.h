@@ -28,7 +28,7 @@
 #include <linux/socket.h>
 #include <net/sock.h>
 
-#include "packet.h"
+#include "packet_kernel.h"
 
 int receive_thread_start(session_t* session);
 bool process_packet(session_t* session, packet_header_t* header);

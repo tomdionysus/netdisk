@@ -19,7 +19,7 @@
 #include "send_thread.h"
 
 #include "netdisk_device.h"
-#include "packet.h"
+#include "packet_kernel.h"
 
 static struct task_struct *send_thread = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(wait_queue);

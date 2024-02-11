@@ -33,7 +33,7 @@
 #include <linux/wait.h>
 
 #include "netdisk_device.h"
-#include "packet.h"
+#include "packet_kernel.h"
 #include "receive_thread.h"
 #include "send_thread.h"
 #include "util.h"

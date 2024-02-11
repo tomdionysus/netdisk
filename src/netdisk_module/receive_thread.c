@@ -20,7 +20,7 @@
 
 #include "module.h"
 #include "netdisk_device.h"
-#include "packet.h"
+#include "packet_kernel.h"
 
 // Externs
 extern netdisk_config_t config;

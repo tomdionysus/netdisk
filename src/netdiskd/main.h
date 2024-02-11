@@ -18,10 +18,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "shared/packet.h"
+#include "packet_posix.h"
+
 #include "config.h"
 #include "logger.h"
 #include "main.h"
-#include "packet.h"
 #include "random.h"
 #include "session.h"
 
