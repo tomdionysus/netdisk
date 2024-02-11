@@ -58,9 +58,13 @@ add_custom_target(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/netdisk_module
 )
 
+execute_process(COMMAND uname -r
+                OUTPUT_VARIABLE KERNEL_VERSION
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+
 install(CODE "
     execute_process(
-        COMMAND make install
+        COMMAND sh -c \"make install > /dev/null 2>&1 && echo '-- Installed Kernel Module: /lib/modules/${KERNEL_VERSION}/kernel/drivers/char/netdisk.ko'\"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/netdisk_module
     )
 ")
