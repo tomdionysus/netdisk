@@ -46,7 +46,7 @@ depmod
 
 ### Server
 
-You must supply a 25 6bit encrption key as a 64 character hex string, and the file of the disk image, which must exist.
+You must supply a 256 bit encrption key as a 64 character hex string, and the file of the disk image, which must exist.
 
 ```sh
 dd if=/dev/zero of=./disk.netdisk bs=1M count=100
