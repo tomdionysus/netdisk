@@ -3,7 +3,7 @@ CONFIG_MODULE_SIG=n
 BINARY      := netdisk
 KERNEL      := /lib/modules/$(shell uname -r)/build
 ARCH        := $(shell uname -m)
-EXTRA_CFLAGS := -I$(PWD)/../ -Wall -DIS_KERNEL=1
+EXTRA_CFLAGS := -I$(PWD)/../ -Wall -DIS_LINUX_KERNEL_MODULE=1
 KMOD_DIR    := $(shell pwd)
 TARGET_PATH := /lib/modules/$(shell uname -r)/kernel/drivers/char
 

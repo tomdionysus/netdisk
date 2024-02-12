@@ -7,15 +7,19 @@
 #ifndef NETDISK_PACKET
 #define NETDISK_PACKET
 
-#if IS_KERNEL
+#if IS_LINUX_KERNEL_MODULE
+
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+
 #else
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <memory.h>
+
 #endif
 
 #define NETDISK_DEFAULT_PORT 26547
