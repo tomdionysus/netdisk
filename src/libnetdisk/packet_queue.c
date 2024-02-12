@@ -9,6 +9,8 @@
 // Function to allocate and initialize a queue
 packet_queue_t* packet_queue_allocate(int32_t max_depth) {
   packet_queue_t* queue = malloc(sizeof(packet_queue_t));
+  memset(queue, 0, sizeof(packet_queue_t));
+
   if (!queue) return NULL;
 
   queue->head = NULL;
@@ -24,17 +26,19 @@ packet_queue_t* packet_queue_allocate(int32_t max_depth) {
 }
 
 // Function to enqueue a packet - blocks if the queue is full
-int packet_queue_enqueue(packet_queue_t* queue, packet_header_t* header, uint8_t* data) {
+int packet_queue_enqueue(packet_queue_t* queue, uint8_t* data, uint32_t length) {
   packet_queue_node_t* new_node = malloc(sizeof(packet_queue_node_t));
   if (!new_node) return PACKET_QUEUE_NOMEM;
 
-  new_node->header = header;
   new_node->data = data;
+  new_node->length = length;
   new_node->next = NULL;
 
   pthread_mutex_lock(&queue->mutex);
 
-  pthread_cond_wait(&queue->not_full, &queue->mutex);
+  if(queue->size >= queue->max_depth) {
+    pthread_cond_wait(&queue->not_full, &queue->mutex);
+  }
 
   // Return NULL if full (SIGINT, etc)
   if (queue->size >= queue->max_depth) {
@@ -57,11 +61,13 @@ int packet_queue_enqueue(packet_queue_t* queue, packet_header_t* header, uint8_t
 }
 
 // Function to dequeue a packet - blocks if the queue is empty
-int packet_queue_dequeue(packet_queue_t* queue, packet_header_t** header, uint8_t** data) {
+int packet_queue_dequeue(packet_queue_t* queue,  uint8_t** data, uint32_t* length) {
   pthread_mutex_lock(&queue->mutex);
 
   // Wait for not empty
-  pthread_cond_wait(&queue->not_empty, &queue->mutex);
+  if(queue->size == 0) {
+    pthread_cond_wait(&queue->not_empty, &queue->mutex);
+  }
 
   // Return NULL if empty (SIGINT, etc)
   if (queue->size == 0) {
@@ -70,8 +76,8 @@ int packet_queue_dequeue(packet_queue_t* queue, packet_header_t** header, uint8_
   }
 
   packet_queue_node_t* node = queue->head;
-  *header = node->header;
   *data = node->data;
+  *length = node->length;
   queue->head = queue->head->next;
 
   if (queue->head == NULL) {
@@ -95,8 +101,7 @@ void packet_queue_free_all_packets(packet_queue_t* queue) {
   while (current) {
     packet_queue_node_t* node = current;
     current = current->next;
-    if (node->header) free(node->header);
-    if (node->data) free(node->data);
+    free(node->data);
     free(node);
   }
 

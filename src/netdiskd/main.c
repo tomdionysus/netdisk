@@ -89,8 +89,6 @@ int main(int argc, char* argv[]) {
   int socket_fd;
   struct sockaddr_in remote_addr;
 
-  session_t* new_session = NULL;
-
   while (running) {
     // Clear the socket set
     FD_ZERO(&readfds);
@@ -122,11 +120,8 @@ int main(int argc, char* argv[]) {
         continue;
       }
 
-      new_session = session_create(socket_fd, remote_addr, handle_connection);
-      if (!new_session) {
+      if (!session_create(socket_fd, remote_addr, recv_thread, send_thread)) {
         log_error("Cannot create session");
-      } else {
-        new_session = NULL;
       }
     }
   }
@@ -148,9 +143,12 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
-void* handle_connection(void* arg) {
+void* recv_thread(void *arg) {
   session_t* session = (session_t*)arg;
   bool thread_running = true;
+
+  uint8_t *inbuffer = malloc(NETDISK_MAX_PACKET_SIZE);
+  uint8_t *outbuffer;
 
   ssize_t recvlen;
   packet_handshake_t* packet;
@@ -162,34 +160,31 @@ void* handle_connection(void* arg) {
     switch (session->state) {
       case NETDISK_SESSION_STATE_INITIAL:
         // Initial state.
-        random_get(session->buffer, NETDISK_KEY_SIZE);
+        outbuffer = malloc(NETDISK_KEY_SIZE);
+        random_get(outbuffer, NETDISK_KEY_SIZE);
         // Setup TX AES Context
-        AES_init_ctx_iv(&session->tx_aes_context, config.key, session->buffer);
+        AES_init_ctx_iv(&session->tx_aes_context, config.key, outbuffer);
         // Send IV
-        packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
+        packet_queue_enqueue(session->send_queue, outbuffer, NETDISK_KEY_SIZE);
         // Set State
         session->state = NETDISK_SESSION_STATE_IV;
         log_debug("(%s) NETDISK_SESSION_STATE_IV", session->remote_addr_str);
         break;
       case NETDISK_SESSION_STATE_IV:
         // Wait for other side of IV
-        recvlen = packet_recv(session->socket_fd, session->buffer, NETDISK_KEY_SIZE, 5000);
+        recvlen = packet_recv(session->socket_fd, inbuffer, NETDISK_KEY_SIZE, 5000);
         if (recvlen == NETDISK_KEY_SIZE) {
           // Setup RX AES Context
-          AES_init_ctx_iv(&session->rx_aes_context, config.key, session->buffer);
+          AES_init_ctx_iv(&session->rx_aes_context, config.key, inbuffer);
           // Init Handshake, Create NodeID
-          packet = (packet_handshake_t*)session->buffer;
+          outbuffer = malloc(sizeof(packet_handshake_t));
+          packet = (packet_handshake_t*)outbuffer;
           packet_handshake_init(packet);
           random_get((uint8_t*)&packet->node_id, sizeof(packet->node_id));
           // Encrypt
-          AES_CBC_encrypt_buffer(&session->tx_aes_context, session->buffer, sizeof(packet_handshake_t));
+          AES_CBC_encrypt_buffer(&session->tx_aes_context, outbuffer, sizeof(packet_handshake_t));
           // Send Handshake
-          ssize_t bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
-          if (bytes_sent < sizeof(packet_handshake_t)) {
-            // Handle the error case
-            log_error("(%s) Send failed", session->remote_addr_str);
-            thread_running = false;
-          }
+          packet_queue_enqueue(session->send_queue, outbuffer, sizeof(packet_handshake_t));
           // Set State
           session->state = NETDISK_SESSION_STATE_HANDSHAKE;
           log_debug("(%s) NETDISK_SESSION_STATE_HANDSHAKE", session->remote_addr_str);
@@ -203,11 +198,11 @@ void* handle_connection(void* arg) {
         break;
       case NETDISK_SESSION_STATE_HANDSHAKE:
         // Wait for handshake packet
-        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_handshake_t), 5000);
+        recvlen = packet_recv(session->socket_fd, inbuffer, sizeof(packet_handshake_t), 5000);
         if (recvlen == sizeof(packet_handshake_t)) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, recvlen);
-          packet = (packet_handshake_t*)session->buffer;
+          AES_CBC_decrypt_buffer(&session->rx_aes_context, inbuffer, recvlen);
+          packet = (packet_handshake_t*)inbuffer;
           // Check Magic number
           if (!packet_magic_check(packet)) {
             log_warn("(%s) Bad magic number", session->remote_addr_str);
@@ -235,11 +230,11 @@ void* handle_connection(void* arg) {
         break;
       case NETDISK_SESSION_STATE_READY:
         // Read a header, then a packet of that length
-        recvlen = packet_recv(session->socket_fd, session->buffer, sizeof(packet_header_t), 1000);
+        recvlen = packet_recv(session->socket_fd, inbuffer, sizeof(packet_header_t), 1000);
         if (recvlen > 0) {
           // Decrypt
-          AES_CBC_decrypt_buffer(&session->rx_aes_context, session->buffer, sizeof(packet_header_t));
-          header = (packet_header_t*)session->buffer;
+          AES_CBC_decrypt_buffer(&session->rx_aes_context, inbuffer, sizeof(packet_header_t));
+          header = (packet_header_t*)inbuffer;
           // Check we have enough buffer
           if (header->length > NETDISK_MAX_PACKET_SIZE) {
             log_warn("(%s) Packet too large (%d bytes, limit %d)", session->remote_addr_str, header->length, NETDISK_MAX_PACKET_SIZE);
@@ -248,17 +243,17 @@ void* handle_connection(void* arg) {
           }
           // If there's more data, receive it
           if (header->length > 0) {
-            if (packet_recv(session->socket_fd, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length, 1000) != header->length) {
+            if (packet_recv(session->socket_fd, (uint8_t*)inbuffer + sizeof(packet_header_t), header->length, 1000) != header->length) {
               log_warn("(%s) Timeout Packet data (%d bytes)", session->remote_addr_str, header->length);
               thread_running = false;
               break;
             }
             // And Decrypt it
-            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t*)session->buffer + sizeof(packet_header_t), header->length);
+            AES_CBC_decrypt_buffer(&session->rx_aes_context, (uint8_t*)inbuffer + sizeof(packet_header_t), header->length);
           }
 
           // Process the packet
-          process_packet(session, header, (uint8_t*)session->buffer + sizeof(packet_header_t));
+          process_packet(session, header, (uint8_t*)inbuffer + sizeof(packet_header_t));
 
         } else if (recvlen == -999) {
           // Do Nothing, timeout in normal operation
@@ -274,6 +269,9 @@ void* handle_connection(void* arg) {
     }
   }
 
+  // Free Buffer
+  free(inbuffer);
+
   // Close socket
   close(session->socket_fd);
   log_info("(%s) Disconnected", session->remote_addr_str);
@@ -284,9 +282,35 @@ void* handle_connection(void* arg) {
   return NULL;
 }
 
+void* send_thread(void *arg) {
+  session_t* session = (session_t*)arg;
+  bool thread_running = true;
+
+  uint8_t* data;
+  int32_t length;
+
+  log_debug("(%s) Send Thread Started", session->remote_addr_str);
+
+  while(running && thread_running) {
+    switch (packet_queue_dequeue(session->send_queue, &data, &length)) {
+    case PACKET_QUEUE_OK:
+      packet_send(session->socket_fd, data, length);
+      free(data);
+      break;
+    case PACKET_QUEUE_SIGINT:
+      thread_running = false;
+      break;
+    }
+  } 
+
+  log_debug("(%s) Send Thread Stopped", session->remote_addr_str);
+  return NULL;
+}
+
 bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) {
   // Alloc Buffer
-  packet_header_t* reply = (packet_header_t*)malloc(NETDISK_MAX_PACKET_SIZE);
+  packet_header_t* reply = (packet_header_t*)malloc(sizeof(packet_header_t));
+  uint8_t* reply_data = NULL;
 
   // Copy user info
   reply->block_id = header->block_id;
@@ -309,11 +333,14 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) 
         log_error("(%s) NETDISK_COMMAND_READ Seek Error %d (pos %lu)", session->remote_addr_str, iolen, header->block_id << NETDISK_BLOCK_SHIFT);
         reply->operation = NETDISK_REPLY_OUT_OF_RANGE;
       } else {
-        iolen = fread((uint8_t*)reply + sizeof(packet_header_t), header->block_length, 1, disk_fd);
+        reply_data = malloc(header->block_length);
+        iolen = fread(reply_data, header->block_length, 1, disk_fd);
         if (ferror(disk_fd)) {
           log_error("(%s) NETDISK_COMMAND_READ File Error %s (pos %lu, length %lu)", session->remote_addr_str, iolen, iolen,
                     header->block_id << NETDISK_BLOCK_SHIFT, header->block_length);
           reply->operation = NETDISK_REPLY_ERROR;
+          free(reply_data);
+          reply_data = NULL;
         } else {
           log_debug("(%s) NETDISK_COMMAND_READ Complete, Block %d Length %d", session->remote_addr_str, header->block_id, header->block_length);
           reply->operation = NETDISK_REPLY_OK;
@@ -347,18 +374,15 @@ bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) 
       reply->operation = NETDISK_REPLY_UNKNOWN_COMMAND;
   }
 
-  // Encrypt
-  uint32_t olen = sizeof(packet_header_t) + reply->length;
-  AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)reply, olen);
+  // Encrypt & Send
+  uint32_t olen = reply->length;
+  AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)reply, sizeof(packet_header_t));
+  packet_queue_enqueue(session->send_queue, (uint8_t*)reply, sizeof(packet_header_t));
 
-  // Send
-  ssize_t sendlen = packet_send(session->socket_fd, (uint8_t*)reply, olen);
-  if (sendlen != olen) {
-    log_warn("(%s) Sending Failed %d", session->remote_addr_str, sendlen);
-  };
-
-  // Free Buffer
-  free(reply);
+  if(reply_data) {
+    AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)reply_data, olen);
+    packet_queue_enqueue(session->send_queue, reply_data, olen);
+  }
 
   return false;
 }

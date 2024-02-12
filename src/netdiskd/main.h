@@ -28,7 +28,8 @@
 #include "session.h"
 
 void signal_stop(int signum);
-void* handle_connection(void* arg);
 bool process_packet(session_t* session, packet_header_t* header, uint8_t* data);
+void* send_thread(void* arg);
+void* recv_thread(void* arg);
 
 #endif

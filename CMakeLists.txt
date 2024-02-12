@@ -4,6 +4,8 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
 project(netdisk C ASM)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 # Includes
 include_directories (
 	${CMAKE_SOURCE_DIR}/src/libnetdisk
@@ -72,15 +74,15 @@ install(CODE "
 endif()
 
 # Test Client
-add_executable(
-	netdisk_testclient
-	${netdisk_testclient_SOURCES}
-)
+# add_executable(
+# 	netdisk_testclient
+# 	${netdisk_testclient_SOURCES}
+# )
 
-target_link_libraries(
-	netdisk_testclient 
-	netdisk
-)
+# target_link_libraries(
+# 	netdisk_testclient 
+# 	netdisk
+# )
 
 # # Testing
 # FetchContent_Declare(
