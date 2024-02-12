@@ -9,7 +9,7 @@ TARGET_PATH := /lib/modules/$(shell uname -r)/kernel/drivers/char
 
 # Specify the object files for the module
 obj-m := $(BINARY).o
-$(BINARY)-objs := ../shared/packet.o module.o util.o transaction.o send_thread.o receive_thread.o aes.o packet_kernel.o netdisk_device.o
+$(BINARY)-objs := ../shared/packet.o packet_queue.o module.o util.o transaction.o send_thread.o receive_thread.o aes.o packet_kernel.o netdisk_device.o
 
 all:
 	make -C $(KERNEL) M=$(PWD) modules
