@@ -21,6 +21,7 @@ typedef struct {
     uint64_t min_time;
     uint64_t max_time;
     uint64_t total_time;
+    uint64_t start_time;
     uint64_t num_samples;
 } profile_stats_t;
 
