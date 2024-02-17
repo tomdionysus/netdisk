@@ -10,15 +10,15 @@ volatile bool running = true;
 volatile bool stopping = false;
 netdisk_testclient_config_t config;
 session_t session_raw;
-session_t *session = &session_raw;
+session_t* session = &session_raw;
 
 pthread_t send_thread_id = NULL;
 
 void* run_send_thread(void* arg) {
   while (running) {
-    packet_header_t *header = malloc(NETDISK_MAX_PACKET_SIZE);
+    packet_header_t* header = malloc(NETDISK_MAX_PACKET_SIZE);
 
-    if((rand() % 2) != 0) {
+    if ((rand() % 2) != 0) {
       header->operation = NETDISK_COMMAND_READ;
       header->block_id = rand() % 128;
       header->length = 0;
@@ -29,17 +29,17 @@ void* run_send_thread(void* arg) {
     }
 
     uint32_t olen = sizeof(packet_header_t) + header->length;
-        AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)header, olen);
+    AES_CBC_encrypt_buffer(&session->tx_aes_context, (uint8_t*)header, olen);
 
-        // Send Command
-        ssize_t bytes_sent = packet_send(session->socket_fd, (uint8_t*)header,olen);
-        if (bytes_sent < sizeof(packet_handshake_t)) {
-            // Handle the error case
-            log_error("send failed");
-        }
+    // Send Command
+    ssize_t bytes_sent = packet_send(session->socket_fd, (uint8_t*)header, olen);
+    if (bytes_sent < sizeof(packet_handshake_t)) {
+      // Handle the error case
+      log_error("send failed");
+    }
 
-        free(header);
-    sleep(1); // Wait for 1 second
+    free(header);
+    sleep(1);  // Wait for 1 second
   }
   return NULL;
 }
@@ -105,12 +105,12 @@ int main(int argc, char* argv[]) {
         // Setup TX AES Context
         AES_init_ctx_iv(&session->tx_aes_context, config.key, session->buffer);
         // Send IV
-         bytes_sent = packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
-          if (bytes_sent < NETDISK_KEY_SIZE) {
-              // Handle the error case
-              log_error("send failed, closing connection");
-              running = false;
-          }
+        bytes_sent = packet_send(session->socket_fd, session->buffer, NETDISK_KEY_SIZE);
+        if (bytes_sent < NETDISK_KEY_SIZE) {
+          // Handle the error case
+          log_error("send failed, closing connection");
+          running = false;
+        }
         // Set State
         session->state = NETDISK_SESSION_STATE_IV;
         log_debug("Client is NETDISK_SESSION_STATE_IV");
@@ -131,9 +131,9 @@ int main(int argc, char* argv[]) {
           // Send Handshake
           bytes_sent = packet_send(session->socket_fd, session->buffer, sizeof(packet_handshake_t));
           if (bytes_sent < sizeof(packet_handshake_t)) {
-              // Handle the error case
-              log_error("send failed, closing connection");
-              running = false;
+            // Handle the error case
+            log_error("send failed, closing connection");
+            running = false;
           }
           // Set State
           session->state = NETDISK_SESSION_STATE_HANDSHAKE;
@@ -148,10 +148,10 @@ int main(int argc, char* argv[]) {
         break;
       case NETDISK_SESSION_STATE_HANDSHAKE:
 
-        if(send_thread_id==NULL) {
+        if (send_thread_id == NULL) {
           if (pthread_create(&send_thread_id, NULL, run_send_thread, NULL) != 0) {
-              log_error("pthread_create");
-              running = false;
+            log_error("pthread_create");
+            running = false;
           }
         }
 
@@ -225,7 +225,7 @@ int main(int argc, char* argv[]) {
 
   running = false;
 
-  if(send_thread_id!=NULL) {
+  if (send_thread_id != NULL) {
     // Optionally join the thread
     pthread_join(send_thread_id, NULL);
   }
@@ -233,7 +233,7 @@ int main(int argc, char* argv[]) {
   // Close the socket
   log_debug("Close socket...");
   packet_destroy_socket(session->socket_fd);
-  
+
   free(session->buffer);
 
   // Close the random source
@@ -246,7 +246,6 @@ int main(int argc, char* argv[]) {
 }
 
 bool process_packet(session_t* session, packet_header_t* header, uint8_t* data) {
-
   log_debug("process_packet (%d bytes)", header->length);
 
   return false;

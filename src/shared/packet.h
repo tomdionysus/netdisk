@@ -9,16 +9,16 @@
 
 #if IS_LINUX_KERNEL_MODULE
 
-#include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/types.h>
 
 #else
 
+#include <memory.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
-#include <memory.h>
 
 #endif
 
@@ -73,7 +73,7 @@ extern const uint8_t NETDISK_MAGIC_NUMBER[];
 // Should be exactly 16 bytes long.
 typedef struct packet_handshake {
   uint8_t magic[4];
-  struct {    
+  struct {
     uint8_t major;
     uint8_t minor;
     uint8_t patch;

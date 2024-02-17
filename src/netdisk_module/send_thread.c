@@ -68,6 +68,10 @@ static int run_send_thread(void *data) {
   return 0;
 }
 
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
+#include <linux/sched/types.h>
+
 void send_thread_start(session_t *session) {
   if (send_thread) {
     return;
@@ -79,7 +83,10 @@ void send_thread_start(session_t *session) {
     printk(KERN_ERR "netdisk: failed to start send thread\n");
     thread_running = false;
     send_thread = NULL;
+    return;
   }
+
+  sched_set_fifo(send_thread);
 }
 
 void enqueue_chunk(transaction_t *trans, chunk_t *chunk) {

@@ -4,10 +4,10 @@
 // Copyright (C) Tom Cully 2024
 // Licensed under the MIT License (see LICENSE in root of project)
 //
-#include "shared/packet.h"
 #include "packet_posix.h"
 
 #include "logger.h"
+#include "shared/packet.h"
 
 int packet_create_server_socket(int *socket_fd, struct sockaddr_in *addr) {
   // Create socket
@@ -19,6 +19,21 @@ int packet_create_server_socket(int *socket_fd, struct sockaddr_in *addr) {
   int enable = 1;
   if (setsockopt(*socket_fd, IPPROTO_TCP, TCP_NODELAY, (void *)&enable, sizeof(enable)) < 0) {
     perror("setsockopt TCP_NODELAY");
+    return NETDISK_PACKET_SOCKET_CREATE_FAILED;
+  }
+
+  int bufferSize = 131072;  // 128 KB in bytes
+                            // Set the send buffer size
+  if (setsockopt(*socket_fd, SOL_SOCKET, SO_SNDBUF, &bufferSize, sizeof(bufferSize)) < 0) {
+    perror("setsockopt SO_SNDBUF");
+    close(*socket_fd);
+    return NETDISK_PACKET_SOCKET_CREATE_FAILED;
+  }
+
+  // Set the receive buffer size
+  if (setsockopt(*socket_fd, SOL_SOCKET, SO_RCVBUF, &bufferSize, sizeof(bufferSize)) < 0) {
+    perror("setsockopt SO_RCVBUF");
+    close(*socket_fd);
     return NETDISK_PACKET_SOCKET_CREATE_FAILED;
   }
 

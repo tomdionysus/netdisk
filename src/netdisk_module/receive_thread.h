@@ -25,8 +25,11 @@
 
 #include <linux/kthread.h>
 #include <linux/mutex.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/socket.h>
 #include <net/sock.h>
+#include <uapi/linux/sched/types.h>
 
 #include "packet_kernel.h"
 

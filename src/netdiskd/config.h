@@ -14,8 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "shared/packet.h"
 #include "logger.h"
+#include "shared/packet.h"
 
 typedef struct {
   struct sockaddr_in addr;

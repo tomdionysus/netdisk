@@ -28,6 +28,22 @@ int packet_create_client_socket(struct socket **tcp_socket, struct sockaddr_in *
     return ret;
   }
 
+  int snd_size = 131072;  // 128 KB
+  ret = sock_setsockopt(*tcp_socket, SOL_SOCKET, SO_SNDBUF, KERNEL_SOCKPTR((void *)&snd_size), sizeof(snd_size));
+  if (ret < 0) {
+    printk(KERN_ERR "netdisk: error setting socket send buffer: %d\n", ret);
+    sock_release(*tcp_socket);
+    return ret;
+  }
+
+  int rcv_size = 131072;  // 128 KB
+  ret = sock_setsockopt(*tcp_socket, SOL_SOCKET, SO_RCVBUF, KERNEL_SOCKPTR((void *)&rcv_size), sizeof(rcv_size));
+  if (ret < 0) {
+    printk(KERN_ERR "netdisk: error setting socket recv buffer: %d\n", ret);
+    sock_release(*tcp_socket);
+    return ret;
+  }
+
   // Connect the socket to the server address
   ret = kernel_connect(*tcp_socket, (struct sockaddr *)addr, sizeof(*addr), 0);
   if (ret < 0) {

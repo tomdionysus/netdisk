@@ -152,6 +152,8 @@ int receive_thread_start(session_t *session) {
     return PTR_ERR(receive_thread);
   }
 
+  sched_set_fifo(receive_thread);
+
   return 0;
 }
 

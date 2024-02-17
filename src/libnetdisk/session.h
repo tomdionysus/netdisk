@@ -11,8 +11,8 @@
 #include <netinet/tcp.h>
 #include <pthread.h>
 
-#include "shared/packet.h"
 #include "random.h"
+#include "shared/packet.h"
 #include "tiny-AES-c/aes.h"
 
 typedef struct session {

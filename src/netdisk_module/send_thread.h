@@ -25,8 +25,10 @@
 
 #include <linux/kthread.h>
 #include <linux/mutex.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
+#include <uapi/linux/sched/types.h>
 
 #include "packet_kernel.h"
 #include "transaction.h"

@@ -24,6 +24,8 @@
 #define NETDISK_TRANSACTION
 
 #include <linux/rbtree.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 

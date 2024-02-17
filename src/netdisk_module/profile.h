@@ -28,16 +28,16 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 
-#define MAX_DOMAINS 100 // Maximum number of domains for profiling
+#define MAX_DOMAINS 100  // Maximum number of domains for profiling
 
 // Structure to hold profile statistics for each domain
 typedef struct {
-    uint32_t domain_id;
-    uint64_t min_time;
-    uint64_t max_time;
-    uint64_t total_time;
-    uint64_t num_samples;
-    uint64_t start_time;
+  uint32_t domain_id;
+  uint64_t min_time;
+  uint64_t max_time;
+  uint64_t total_time;
+  uint64_t num_samples;
+  uint64_t start_time;
 } profile_stats_t;
 
 void profile_clear_all();
