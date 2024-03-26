@@ -21,6 +21,8 @@
 #include <linux/scatterlist.h>
 
 AES_ctx_t* AES_CBC_alloc(const uint8_t* key) {
+  int err;
+
   AES_ctx_t* ctx = kmalloc(sizeof(AES_ctx_t), GFP_KERNEL);
 
   ctx->rx_tfm = crypto_alloc_skcipher("cbc-aes-aesni", 0, 0);
@@ -33,8 +35,6 @@ AES_ctx_t* AES_CBC_alloc(const uint8_t* key) {
     pr_err("Error allocating cbc(aes) txhandle: %ld\n", PTR_ERR(ctx->tx_tfm));
     return NULL;
   }
-
-  int err;
 
   err = crypto_skcipher_setkey(ctx->rx_tfm, key, AES_KEYLEN);
   if (err) {
@@ -53,7 +53,7 @@ AES_ctx_t* AES_CBC_alloc(const uint8_t* key) {
 void AES_CBC_set_tx_iv(AES_ctx_t* ctx, const uint8_t* iv) { memcpy(ctx->tx_iv, iv, AES_BLOCKLEN); }
 void AES_CBC_set_rx_iv(AES_ctx_t* ctx, const uint8_t* iv) { memcpy(ctx->rx_iv, iv, AES_BLOCKLEN); }
 
-static void __crypto_req_done(void* req, int err) {}
+static void __crypto_req_done(struct crypto_async_request *req, int err) {}
 
 void AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t length) {
   DECLARE_CRYPTO_WAIT(wait);
@@ -61,10 +61,12 @@ void AES_CBC_encrypt_buffer(AES_ctx_t* ctx, uint8_t* out, uint8_t* in, uint32_t 
   struct scatterlist sg_in;
   struct scatterlist sg_out;
 
+  struct skcipher_request* req;
+
   sg_init_one(&sg_in, in, length);
   sg_init_one(&sg_out, out, length);
 
-  struct skcipher_request* req = skcipher_request_alloc(ctx->tx_tfm, GFP_KERNEL);
+  req = skcipher_request_alloc(ctx->tx_tfm, GFP_KERNEL);
   if (!req) {
     pr_err("skcipher_request_alloc error\n");
   }
