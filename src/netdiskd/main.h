@@ -18,14 +18,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "shared/packet.h"
-#include "packet_posix.h"
-
 #include "config.h"
 #include "logger.h"
 #include "main.h"
+#include "packet_posix.h"
 #include "random.h"
 #include "session.h"
+#include "shared/packet.h"
 
 void signal_stop(int signum);
 void* handle_connection(void* arg);

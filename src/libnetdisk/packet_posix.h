@@ -16,8 +16,8 @@
 #include <sys/time.h>
 #include <time.h>
 
-#include "shared/packet.h"
 #include "random.h"
+#include "shared/packet.h"
 
 int packet_create_server_socket(int* socket_fd, struct sockaddr_in* addr);
 int packet_create_client_socket(int* socket_fd, struct sockaddr_in* addr);

@@ -11,7 +11,7 @@ static struct netdisk *dev = NULL;
 extern netdisk_config_t config;
 extern struct rb_root trans_tree;
 
-static int netdisk_open(struct gendisk *disk, blk_mode_t mode) {
+static int netdisk_open(struct gendisk *disk, fmode_t mode) {
   if (!blk_get_queue(disk->queue)) {
     printk(KERN_ERR "netdisk: blk_get_queue cannot get queue");
     return -ENXIO;
@@ -23,10 +23,11 @@ static int netdisk_open(struct gendisk *disk, blk_mode_t mode) {
 static void netdisk_release(struct gendisk *disk) { blk_put_queue(disk->queue); }
 
 static int netdisk_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd, unsigned long arg) {
+  struct hd_geometry geo;
+
   if (cmd == HDIO_GETGEO) {
     printk(KERN_NOTICE "netdisk: netdisk_ioctl::HDIO_GETGEO");
 
-    struct hd_geometry geo;
     geo.heads = 4;
     geo.sectors = 16;
     geo.cylinders = (dev->capacity_sectors & ~0x3f) >> 6;
@@ -77,11 +78,12 @@ static int netdisk_process_request(struct request *rq) {
 
 void netdisk_complete_chunk(session_t *session, packet_header_t *header) {
   transaction_t *trans;
+  chunk_t *chunk;
+
   if ((trans = find_transaction(header->transaction_id)) == NULL) {
     return;
   }
 
-  chunk_t *chunk;
   if ((chunk = find_chunk(trans, header->block_id)) == NULL) {
     printk(KERN_ERR "netdisk: chunk %llu not found (transaction %llu)", header->block_id, header->transaction_id);
     return;
@@ -124,11 +126,12 @@ void netdisk_complete_chunk(session_t *session, packet_header_t *header) {
 
 void netdisk_error_chunk(u64 trans_id, u64 block_id, u8 error) {
   transaction_t *trans;
+  chunk_t *chunk;
+
   if ((trans = find_transaction(trans_id)) == NULL) {
     return;
   }
 
-  chunk_t *chunk;
   if ((chunk = find_chunk(trans, block_id)) == NULL) {
     printk(KERN_ALERT "netdisk: chunk %llu not found (transaction %llu)", block_id, trans_id);
     return;
@@ -172,6 +175,8 @@ static struct blk_mq_ops netdisk_mq_ops = {
 };
 
 int create_netdisk_device(char *devicename, struct socket *tcp_socket) {
+  int err;
+
   // Register new block device and get device major number
   dev_major = register_blkdev(dev_major, devicename);
   if (dev_major < 0) {
@@ -220,7 +225,7 @@ int create_netdisk_device(char *devicename, struct socket *tcp_socket) {
   dev->tag_set->cmd_size = 0;
 
   // Set it up in the system
-  int err = blk_mq_alloc_tag_set(dev->tag_set);
+  err = blk_mq_alloc_tag_set(dev->tag_set);
   if (err) {
     printk(KERN_ERR "netdisk: blk_mq_alloc_tag_set returned error %d\n", err);
     release_netdisk_device();

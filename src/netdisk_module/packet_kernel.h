@@ -30,10 +30,9 @@
 #include <net/sock.h>
 
 #include "aes.h"
+#include "shared/packet.h"
 #include "transaction.h"
 #include "util.h"
-
-#include "shared/packet.h"
 
 #pragma pack(push, 1)
 

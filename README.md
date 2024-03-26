@@ -55,7 +55,7 @@ netdiskd --key=6f334a6b4aa5a7ac8462387a3cdb8f5755b3c1ef0947cb1492c86793265166c0 
 
 ### Client
 
-The client is a linux kernel module, that can be loaded using `modprobe`. You must supply an indentical 256 bit encrption key, as well as the IP address of a running `netdiskd` server.
+The client is a linux kernel module, that can be loaded using `modprobe`. You must supply an identical 256 bit encrption key, as well as the IP address of a running `netdiskd` server.
 
 ```sh
 modprobe netdisk key=6f334a6b4aa5a7ac8462387a3cdb8f5755b3c1ef0947cb1492c86793265166c0 address=192.168.1.40

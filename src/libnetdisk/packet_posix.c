@@ -4,10 +4,10 @@
 // Copyright (C) Tom Cully 2024
 // Licensed under the MIT License (see LICENSE in root of project)
 //
-#include "shared/packet.h"
 #include "packet_posix.h"
 
 #include "logger.h"
+#include "shared/packet.h"
 
 int packet_create_server_socket(int *socket_fd, struct sockaddr_in *addr) {
   // Create socket

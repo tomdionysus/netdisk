@@ -9,6 +9,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -16,16 +17,14 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <unistd.h>
-#include <pthread.h>
 
-#include "shared/packet.h"
-#include "packet_posix.h"
 #include "config.h"
 #include "logger.h"
 #include "main.h"
+#include "packet_posix.h"
 #include "random.h"
 #include "session.h"
+#include "shared/packet.h"
 
 #define AES256 1
 #include "tiny-AES-c/aes.h"

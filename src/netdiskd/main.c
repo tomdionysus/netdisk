@@ -4,9 +4,9 @@
 // Copyright (C) Tom Cully 2024
 // Licensed under the MIT License (see LICENSE in root of project)
 //
-#include <errno.h>
-
 #include "main.h"
+
+#include <errno.h>
 
 netdiskd_config_t config;
 
